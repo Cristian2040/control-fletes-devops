@@ -1,0 +1,59 @@
+name: CI
+
+# Se ejecuta en cada push a develop y en cada Pull Request hacia main.
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  mobile:
+    name: Flutter - analyze & test
+    runs-on: ubuntu-latest
+    # Este job asume que el código Flutter vive en /app/mobile
+    defaults:
+      run:
+        working-directory: app/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Instalar dependencias
+        run: flutter pub get
+
+      - name: Analizar código (lint)
+        run: flutter analyze
+
+      - name: Ejecutar pruebas unitarias/widget
+        run: flutter test
+
+  backend:
+    name: Node/Express - lint & test
+    runs-on: ubuntu-latest
+    # Este job asume que la API vive en /app/backend
+    defaults:
+      run:
+        working-directory: app/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/backend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --if-present
+
+      - name: Ejecutar pruebas unitarias (Jest)
+        run: npm test --if-present

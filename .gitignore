@@ -1,0 +1,24 @@
+# Flutter/Dart
+app/mobile/.dart_tool/
+app/mobile/.flutter-plugins
+app/mobile/.flutter-plugins-dependencies
+app/mobile/.packages
+app/mobile/build/
+app/mobile/*.iml
+app/mobile/*.log
+
+# Node/Backend
+app/backend/node_modules/
+app/backend/dist/
+app/backend/*.log
+
+# Entorno / credenciales
+.env
+.env.*
+*.pem
+*.keystore
+*.jks
+
+# Sistema
+.DS_Store
+Thumbs.db
