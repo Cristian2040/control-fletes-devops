@@ -1,6 +1,6 @@
 # Control de Fletes — Práctica DevOps
 
-![CI](https://github.com/Cristian2040/control-fletes-devops-lightgrey)
+![CI](https://github.com/Cristian2040/control-fletes-devops.git-lightgrey)
 ![Versión](https://img.shields.io/badge/versión-v0.1.0--Sprint0-blue)
 
 App móvil offline-first (Flutter) + API REST (Node.js/Express + MongoDB) para el control de gastos, viajes y liquidaciones de empresas de autotransporte de carga. Proyecto de la materia **Desarrollo Móvil Integral** — UTSJR.
