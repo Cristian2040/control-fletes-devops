@@ -1,0 +1,16 @@
+# CODEOWNERS
+# Asigna revisores automáticos según la carpeta modificada en un PR.
+# Reemplazar los usuarios de GitHub por los reales del equipo antes de usarlo en serio.
+
+# Backend / datos / CI
+/app/backend/  @Cristian2040
+/.github/workflows/  @Cristian2040
+
+# App móvil
+/app/mobile/  @usuario-yair
+
+# Documentación y planeación
+/docs/  @usuario-felipe
+
+# Todo lo demás, por defecto
+*  @Cristian2040

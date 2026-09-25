@@ -1,18 +1,20 @@
 # Control de Fletes — Práctica DevOps
 
-![CI](https://github.com/Cristian2040/control-fletes-devops-lightgrey)
+![CI](https://img.shields.io/badge/CI-configurar_URL_del_repo-lightgrey)
 ![Versión](https://img.shields.io/badge/versión-v0.1.0--Sprint0-blue)
 
-App móvil offline-first (Flutter) + API REST (Node.js/Express + MongoDB) para el control de gastos, viajes y liquidaciones de empresas de autotransporte de carga. Proyecto de la materia **Desarrollo Móvil Integral** — UTSJR.
+App móvil offline-first (Flutter) + API REST (Node.js/Express + MongoDB) para el control de gastos, viajes y liquidaciones de empresas de autotransporte de carga. Proyecto de la materia **Desarrollo Móvil Integral** — UTSJdR.
+
+> Nota: el badge de CI de arriba es un placeholder; al subir este repo a GitHub, reemplazar la URL por la del workflow real: `https://github.com/<usuario_u_org>/<repo>/actions/workflows/ci.yml/badge.svg`.
 
 ## Equipo
 
 | Integrante | Rol |
 |---|---|
 | Yair Barrios | Scrum Master & Dev Lead Mobile |
-| Cristian Hernández | Backend, Arquitecto de Datos  |
+| Cristian Hernández | Backend, Arquitecto de Datos & QA |
 | Felipe Estrella | Product Owner & Analista de Negocio |
-| Yaneli Mendoza | Diseñadora UX/UI & Frontend & QA |
+| Yaneli Mendoza | Diseñadora UX/UI & Frontend |
 
 ## Estructura del repositorio
 
@@ -53,10 +55,14 @@ npm run dev
 - 💬 [Matriz y dictamen de herramienta de comunicación](docs/matriz-comunicacion.md)
 - 📖 [Guía de comunicación del equipo](docs/guia-comunicacion.md)
 - 🗂️ [Backlog y board de Sprint 0](docs/sprint0-board.md)
+- 🔀 [Workflow de versionamiento — comparación y diagrama](docs/workflow-versionamiento.md)
+- 🚀 [Estrategia de despliegue móvil](docs/estrategia-despliegue-movil.md)
+- 🧪 [Demostrador de Feature Flag (Producto F)](demo/feature-flag/README.md)
+- 🤝 [Guía de contribución (CONTRIBUTING.md)](CONTRIBUTING.md)
 
 ## Board y comunicación
 
-- **Board:** Jira (proyecto tipo Scrum) — columnas Backlog / To-Do / In-Progress / Review / Done. (Enlace: https://control-fletes.atlassian.net/?continue=https%3A%2F%2Fcontrol-fletes.atlassian.net%2Fwelcome%2Fsoftware%3FprojectId%3D10000&atlOrigin=eyJpIjoiOTE1NjA2N2NkOGRlNGZjOTk5NGQ2M2ZiMDU2OTJjYjQiLCJwIjoiamlyYS1zb2Z0d2FyZSJ9).
+- **Board:** Jira (proyecto tipo Scrum) — columnas Backlog / To-Do / In-Progress / Review / Done. (Enlace: completar con la URL del proyecto Jira).
 - **Comunicación:** Discord — canales `#anuncios`, `#dev`, `#qa`, `#ops`, `#dudas`, `#random` (ver `docs/guia-comunicacion.md`).
 
 ## Ramas y flujo de trabajo
