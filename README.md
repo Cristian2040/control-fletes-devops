@@ -1,11 +1,9 @@
 # Control de Fletes — Práctica DevOps
 
-![CI](https://img.shields.io/badge/CI-configurar_URL_del_repo-lightgrey)
+![CI](https://img.shields.io/badge/CI-lightgrey)
 ![Versión](https://img.shields.io/badge/versión-v0.1.0--Sprint0-blue)
 
 App móvil offline-first (Flutter) + API REST (Node.js/Express + MongoDB) para el control de gastos, viajes y liquidaciones de empresas de autotransporte de carga. Proyecto de la materia **Desarrollo Móvil Integral** — UTSJdR.
-
-> Nota: el badge de CI de arriba es un placeholder; al subir este repo a GitHub, reemplazar la URL por la del workflow real: `https://github.com/<usuario_u_org>/<repo>/actions/workflows/ci.yml/badge.svg`.
 
 ## Equipo
 
