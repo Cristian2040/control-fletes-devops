@@ -1,7 +1,7 @@
 # Plan DevOps del Proyecto Móvil — Control de Fletes
 
 **Materia:** Desarrollo Móvil Integral — UTSJdR
-**Equipo:** Yair Barrios (Scrum Master / Dev Lead Mobile) · Cristian Hernández Barragan (Backend, Arquitecto de Datos y QA) · Felipe Estrella (Product Owner) · Yaneli Mendoza (UX/UI y Frontend)
+**Equipo:** Yair Barrios (Scrum Master / Dev Lead Mobile) · Cristian Hernández (Backend, Arquitecto de Datos y QA) · Felipe Estrella (Product Owner) · Yaneli Mendoza (UX/UI y Frontend)
 
 ---
 
