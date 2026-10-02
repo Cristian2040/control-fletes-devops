@@ -1,0 +1,61 @@
+# Dependencias y build de Node.js
+node_modules/
+npm-debug.log*
+.env
+
+# Build de Flutter
+build/
+frontend/build/
+frontend/.dart_tool/
+frontend/.packages
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/android/.gradle/
+frontend/android/local.properties
+frontend/android/app/debug/
+frontend/android/app/profile/
+frontend/android/app/release/
+frontend/ios/Pods/
+frontend/ios/.symlinks/
+frontend/ios/Flutter/Flutter.framework
+frontend/ios/Flutter/Flutter.podspec
+frontend/ios/Flutter/Generated.xcconfig
+frontend/ios/Flutter/app.flx
+frontend/ios/Flutter/app.zip
+frontend/ios/Flutter/engine
+frontend/ios/Flutter/flutter_assets
+frontend/ios/ServiceDefinitions.json
+frontend/.pub-cache/
+frontend/.pub/
+frontend/coverage/
+
+# Archivos generados de Dart
+*.dart.js
+*.js_
+*.js.deps
+*.js.map
+*.g.dart
+*.freezed.dart
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Uploads locales del backend (imágenes en desarrollo)
+backend/uploads/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+desktop.ini
