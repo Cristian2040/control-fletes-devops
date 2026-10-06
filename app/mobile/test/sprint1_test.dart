@@ -1,4 +1,5 @@
-﻿/// Pruebas del Sprint 1 y 2 — Widget, Autenticación y Estructura.
+/// Pruebas del Sprint 1 y 2 — Widget, Autenticación y Estructura.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
