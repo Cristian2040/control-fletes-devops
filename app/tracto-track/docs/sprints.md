@@ -75,3 +75,62 @@ Registro de entregas por Sprint, con lo construido, pruebas y decisiones.
 - Backend: `backend/test/auth.test.js` (11 tests en total) — Registro, login, middleware JWT, token inválido/ausente.
 - Frontend: `frontend/test/sprint1_test.dart` (15 tests en total) — Widgets, autenticación, tema, persistencia, ApiClient.
 
+---
+
+## Sprint 3 — Captura Móvil de Gastos e Insumos (RF-02, US-03, P3 Strategy)
+
+**Fecha:** Octubre 2026
+
+### Entregables
+
+#### Backend
+- **Modelo Mongoose `Gasto`** (`src/models/Gasto.js`):
+  - Folio autoincrementado con formato `#TT-######` (Supuesto S-01).
+  - Tipos: `diesel`, `fluidos`, `viaticos`.
+  - Campos: `monto`, `odometro`, `proveedor`, `fotografiaUrl`, `fotografiaBase64`, `compresionOptimizada`, `chofer`, `usuario`, `placasCamion`, `estadoSincronizacion`, `estadoAuditoria`, `fecha`.
+- **Patrón de Diseño P3: Strategy** (`src/strategies/`):
+  - `BaseGastoValidationStrategy.js`: Clase base abstracta para validación de gastos.
+  - `DieselValidationStrategy.js`: Exige odómetro obligatorio, foto y monto > 0.
+  - `FluidosValidationStrategy.js`: Exige odómetro obligatorio (mantenimiento), foto y monto > 0.
+  - `ViaticosValidationStrategy.js`: Odómetro opcional, foto obligatoria y monto > 0.
+  - `GastoValidationContext.js`: Selección dinámica de la estrategia en tiempo de ejecución.
+- **Controlador `gastoController.js`**:
+  - `POST /api/gastos`: Validación con Strategy P3, generación automática de folio secuencial y guardado.
+  - `GET /api/gastos`: Consulta con cálculo de total acumulado y contador para la bitácora C-05.
+  - `GET /api/gastos/:id`: Consulta individual por ID o Folio.
+- **Rutas de Gastos** (`src/routes/gastos.js`): Protegidas con middleware JWT `autenticarToken` montadas en `/api/gastos`.
+
+#### Frontend
+- **Patrón Strategy en Dart** (`lib/features/chofer/strategies/gasto_validation_strategy.dart`):
+  - `GastoValidationStrategy`, `DieselValidationStrategy`, `FluidosValidationStrategy`, `ViaticosValidationStrategy`, `GastoValidationContext`.
+- **Modelo Dart `GastoModel`** (`lib/data/models/gasto_model.dart`).
+- **Ampliación de `ApiClient`**: Métodos `registrarGasto` y `obtenerGastos` con respaldo offline y datos muestra.
+- **Barra de Navegación Inferior `ChoferBottomNavBar`** (`lib/features/chofer/widgets/chofer_bottom_nav_bar.dart`): Navegación entre C-02, C-05 y C-06.
+- **Pantalla C-02 `RutaScreen`** (`lib/features/chofer/screens/ruta_screen.dart`):
+  - Operador asignado con etiqueta `EN RUTA`.
+  - Tarjeta de unidad con placas `NLZ-8823-A`, odómetro `142,500 KM`, tramo `Monterrey → CDMX`, cliente `CEMEX S.A. de C.V.`.
+  - Botón principal `+ Registrar Gasto de Ruta (RF-02)`.
+  - Lista de comprobantes recientes con estado `SINCRONIZADO`.
+- **Pantalla C-03 `CapturaGastoScreen`** (`lib/features/chofer/screens/captura_gasto_screen.dart`):
+  - Formulario express con selector de tipo (Diésel, Fluidos, Viáticos).
+  - Campo dinámico de odómetro (obligatorio/opcional según Strategy).
+  - Zona de fotografía con validación estricta (US-03) e indicador de compresión (US-09comp: 1.8 MB → 142 KB).
+  - Botón `Guardar y Transmitir Registro`.
+- **Pantalla C-04 `RegistroProcesadoScreen`** (`lib/features/chofer/screens/registro_procesado_screen.dart`):
+  - Confirmación de registro con folio `#TT-######`.
+  - Resumen de monto, insumo, odómetro y estado `SINCRONIZADO`.
+  - Acciones: `Capturar Otro Ticket` y `Regresar a Ruta Activa`.
+- **Pantalla C-05 `MisGastosScreen`** (`lib/features/chofer/screens/mis_gastos_screen.dart`):
+  - Barra de totales con importe acumulado y contador de comprobantes.
+  - Historial de comprobantes con badges de estado y auditoría.
+- **Pantalla C-06 `PerfilChoferScreen`** (`lib/features/chofer/screens/perfil_chofer_screen.dart`):
+  - Datos de identidad y licencia federal `LF-9928172`.
+  - Asignación de unidad y empresa `Transportes Flores S.A.`.
+  - Botón `Cerrar Sesión` con limpieza de token JWT.
+- **Actualización de `AppRoutes`**: Rutas C-02 a C-06 conectadas directamente.
+
+### Pruebas
+- Backend: `backend/test/gastos.test.js` + `test/auth.test.js` + `test/health.test.js` (27 pruebas aprobadas).
+- Frontend: `frontend/test/sprint3_test.dart` + `test/sprint1_test.dart` (27 pruebas aprobadas).
+
+
