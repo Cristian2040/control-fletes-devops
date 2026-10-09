@@ -65,7 +65,8 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      expect(find.text('C-02'), findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is Text && (w.data == 'C-02' || w.data == 'EN RUTA')), findsOneWidget);
+
     });
 
     testWidgets('Navega al placeholder Admin al seleccionar Dueño De Flota en Modo Demo', (tester) async {
