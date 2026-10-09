@@ -13,6 +13,7 @@ const morgan = require('morgan');
 const { notFound, errorHandler } = require('./middlewares/errorHandler');
 const healthRoutes = require('./routes/health');
 const authRoutes = require('./routes/auth');
+const gastosRoutes = require('./routes/gastos');
 
 const app = express();
 
@@ -30,6 +31,8 @@ if (process.env.NODE_ENV !== 'test') {
 // --- Rutas ---
 app.use('/health', healthRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/gastos', gastosRoutes);
+
 
 // --- Manejo de errores ---
 app.use(notFound);

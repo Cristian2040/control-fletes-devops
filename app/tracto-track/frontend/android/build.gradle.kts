@@ -5,8 +5,10 @@ allprojects {
     }
 }
 
-val buildDirFile = java.io.File(System.getProperty("java.io.tmpdir"), "tracto_track_build")
-val newBuildDir: Directory = objects.directoryProperty().fileValue(buildDirFile).get()
+val newBuildDir: Directory =
+    rootProject.layout.buildDirectory
+        .dir("../../build")
+        .get()
 rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {
@@ -19,15 +21,4 @@ subprojects {
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
-}
-
-val flutterBuildDir = file("../../build")
-gradle.buildFinished {
-    val srcDir = file("${newBuildDir.asFile}/app/outputs")
-    if (srcDir.exists()) {
-        copy {
-            from(srcDir)
-            into(file("$flutterBuildDir/app/outputs"))
-        }
-    }
 }

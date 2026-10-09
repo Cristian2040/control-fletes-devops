@@ -56,7 +56,18 @@ class AppColors {
 class AppTheme {
   AppTheme._();
 
+  static const Color backgroundDark = AppColors.background;
+  static const Color surfaceDark = AppColors.surface;
+  static const Color cardDark = AppColors.card;
+  static const Color primaryBlue = AppColors.primary;
+  static const Color accentGreen = AppColors.success;
+  static const Color accentYellow = AppColors.warning;
+  static const Color accentRed = AppColors.error;
+  static const Color textPrimary = AppColors.textPrimary;
+  static const Color textSecondary = AppColors.textSecondary;
+
   static ThemeData get darkTheme {
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
