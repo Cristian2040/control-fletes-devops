@@ -12,7 +12,11 @@ import 'package:flutter/material.dart';
 // Importar pantallas (se implementan progresivamente por Sprint)
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
-import '../../features/chofer/screens/placeholder_screen.dart';
+import '../../features/chofer/screens/ruta_screen.dart';
+import '../../features/chofer/screens/captura_gasto_screen.dart';
+import '../../features/chofer/screens/registro_procesado_screen.dart';
+import '../../features/chofer/screens/mis_gastos_screen.dart';
+import '../../features/chofer/screens/perfil_chofer_screen.dart';
 import '../../features/admin/screens/placeholder_screen.dart';
 
 class AppRoutes {
@@ -50,32 +54,13 @@ class AppRoutes {
       login: (context) => const LoginScreen(),
       register: (context) => const RegisterScreen(),
 
-      // Módulo Chofer — placeholders hasta Sprint 3
-      choferHome: (context) => const ChoferPlaceholderScreen(
-            codigo: 'C-02',
-            nombre: 'Ruta – Inicio del chofer',
-            sprint: 3,
-          ),
-      choferCapturaGasto: (context) => const ChoferPlaceholderScreen(
-            codigo: 'C-03',
-            nombre: 'Captura de Gasto en Ruta',
-            sprint: 3,
-          ),
-      choferRegistro: (context) => const ChoferPlaceholderScreen(
-            codigo: 'C-04',
-            nombre: 'Registro Procesado',
-            sprint: 3,
-          ),
-      choferBitacora: (context) => const ChoferPlaceholderScreen(
-            codigo: 'C-05',
-            nombre: 'Bitácora de Gastos',
-            sprint: 3,
-          ),
-      choferPerfil: (context) => const ChoferPlaceholderScreen(
-            codigo: 'C-06',
-            nombre: 'Perfil de Operador',
-            sprint: 3,
-          ),
+      // Módulo Chofer (C-02 a C-06) — Implementado en Sprint 3
+      choferHome: (context) => const RutaScreen(),
+      choferCapturaGasto: (context) => const CapturaGastoScreen(),
+      choferRegistro: (context) => const RegistroProcesadoScreen(),
+      choferBitacora: (context) => const MisGastosScreen(),
+      choferPerfil: (context) => const PerfilChoferScreen(),
+
 
       // Módulo Administrador — placeholders hasta sus Sprints correspondientes
       adminHome: (context) => const AdminPlaceholderScreen(
