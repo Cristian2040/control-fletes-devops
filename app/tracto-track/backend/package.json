@@ -9,7 +9,13 @@
     "test": "jest --forceExit --detectOpenHandles --verbose",
     "test:watch": "jest --watch --forceExit --detectOpenHandles"
   },
-  "keywords": ["autotransporte", "fletes", "gastos", "liquidaciones", "spf"],
+  "keywords": [
+    "autotransporte",
+    "fletes",
+    "gastos",
+    "liquidaciones",
+    "spf"
+  ],
   "author": "Equipo Tracto Trak",
   "license": "ISC",
   "dependencies": {
@@ -31,7 +37,12 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "testMatch": ["**/test/**/*.test.js"],
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ],
     "testTimeout": 30000
+  },
+  "directories": {
+    "test": "test"
   }
 }
