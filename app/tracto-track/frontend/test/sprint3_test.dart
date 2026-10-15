@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tracto_trak/core/theme/app_theme.dart';
 import 'package:tracto_trak/data/models/gasto_model.dart';
 import 'package:tracto_trak/features/chofer/screens/captura_gasto_screen.dart';
@@ -10,6 +11,10 @@ import 'package:tracto_trak/features/chofer/screens/ruta_screen.dart';
 import 'package:tracto_trak/features/chofer/strategies/gasto_validation_strategy.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('Patrón de Diseño P3: Strategy en Dart (Validación de Gastos)', () {
     final diesel = DieselValidationStrategy();
     final fluidos = FluidosValidationStrategy();
