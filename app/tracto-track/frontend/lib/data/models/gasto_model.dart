@@ -89,4 +89,48 @@ class GastoModel {
         return tipo;
     }
   }
+
+  /// Retorna true si el gasto aún no se ha sincronizado con la nube (US-04).
+  bool get isPendiente => estadoSincronizacion.toLowerCase() == 'pendiente';
+
+  /// Retorna true si el gasto ya está sincronizado en MongoDB.
+  bool get isSincronizado => estadoSincronizacion.toLowerCase() == 'sincronizado';
+
+  /// Etiqueta amigable de sincronización para la interfaz.
+  String get estadoSincronizacionLegible =>
+      isPendiente ? 'Pendiente de sincronización' : 'Sincronizado';
+
+  /// Genera una copia del modelo modificando solo los campos requeridos.
+  GastoModel copyWith({
+    String? id,
+    String? folio,
+    String? tipo,
+    double? monto,
+    double? odometro,
+    String? proveedor,
+    String? fotografiaUrl,
+    String? fotografiaBase64,
+    bool? compresionOptimizada,
+    String? placasCamion,
+    String? estadoSincronizacion,
+    String? estadoAuditoria,
+    DateTime? fecha,
+  }) {
+    return GastoModel(
+      id: id ?? this.id,
+      folio: folio ?? this.folio,
+      tipo: tipo ?? this.tipo,
+      monto: monto ?? this.monto,
+      odometro: odometro ?? this.odometro,
+      proveedor: proveedor ?? this.proveedor,
+      fotografiaUrl: fotografiaUrl ?? this.fotografiaUrl,
+      fotografiaBase64: fotografiaBase64 ?? this.fotografiaBase64,
+      compresionOptimizada: compresionOptimizada ?? this.compresionOptimizada,
+      placasCamion: placasCamion ?? this.placasCamion,
+      estadoSincronizacion: estadoSincronizacion ?? this.estadoSincronizacion,
+      estadoAuditoria: estadoAuditoria ?? this.estadoAuditoria,
+      fecha: fecha ?? this.fecha,
+    );
+  }
 }
+
