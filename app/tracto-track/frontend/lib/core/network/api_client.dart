@@ -10,11 +10,28 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
 
+import '../../data/models/gasto_model.dart';
+import '../../data/repositories/local_gasto_repository.dart';
+
 class ApiClient {
   // --- Singleton ---
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
   ApiClient._internal();
+
+  /// Repositorio local de gastos en dispositivo (Sprint 4, US-04)
+  final LocalGastoRepository _localRepo = LocalGastoRepository();
+  LocalGastoRepository get localRepo => _localRepo;
+
+  /// Simulación de modo avión / sin red celular (US-04)
+  bool _modoAvion = false;
+  bool get isModoAvion => _modoAvion;
+  bool get isOnline => !_modoAvion;
+
+  /// Alterna o define el estado de conexión (Modo Avión vs Online)
+  void setModoAvion(bool activo) {
+    _modoAvion = activo;
+  }
 
   /// Token JWT actual (null si no hay sesión activa)
   String? _token;
@@ -251,7 +268,7 @@ class ApiClient {
     },
   ];
 
-  /// Registra un nuevo gasto de ruta (POST /api/gastos)
+  /// Registra un nuevo gasto de ruta (POST /api/gastos o Local Offline US-04).
   Future<Map<String, dynamic>> registrarGasto({
     required String tipo,
     required double monto,
@@ -261,6 +278,28 @@ class ApiClient {
     String? fotografiaBase64,
     String? placasCamion,
   }) async {
+    // Si estamos en modo avión / sin red, guardamos directamente de forma local (US-04)
+    if (_modoAvion) {
+      final nuevoGastoOffline = GastoModel(
+        id: 'offline_${DateTime.now().millisecondsSinceEpoch}',
+        folio: '',
+        tipo: tipo,
+        monto: monto,
+        odometro: odometro,
+        proveedor: proveedor,
+        fotografiaUrl: fotografiaUrl ?? 'ticket_offline.jpg',
+        fotografiaBase64: fotografiaBase64 ?? '',
+        compresionOptimizada: true,
+        placasCamion: placasCamion ?? 'NLZ-8823-A',
+        estadoSincronizacion: 'pendiente', // US-04: Marcar como pendiente
+        estadoAuditoria: 'pendiente',
+        fecha: DateTime.now(),
+      );
+
+      final guardado = await _localRepo.guardarGastoOffline(nuevoGastoOffline);
+      return guardado.toJson();
+    }
+
     final payload = {
       'tipo': tipo,
       'monto': monto,
@@ -286,58 +325,80 @@ class ApiClient {
         throw Exception(errMsg);
       }
     } catch (e) {
-      // Si la API falla o no está disponible, soporte de fallback en memoria (Modo Demo / Offline)
-      final nuevoFolio = '#TT-${(143 + _demoGastos.length).toString().padLeft(6, '0')}';
-      final gastoMock = {
-        'id': 'local_${DateTime.now().millisecondsSinceEpoch}',
-        'folio': nuevoFolio,
-        'tipo': tipo,
-        'monto': monto,
-        'odometro': odometro,
-        'proveedor': proveedor,
-        'fotografiaUrl': fotografiaUrl ?? 'ticket_adjunto.jpg',
-        'fotografiaBase64': fotografiaBase64 ?? '',
-        'placasCamion': placasCamion ?? 'NLZ-8823-A',
-        'estadoSincronizacion': 'sincronizado',
-        'estadoAuditoria': 'pendiente',
-        'fecha': DateTime.now().toIso8601String(),
-      };
-      _demoGastos.insert(0, gastoMock);
-      return gastoMock;
+      // Si la API falla o no hay conexión (offline accidental / tramo carretero),
+      // persistir en la base de datos local embebida con estado 'pendiente' (US-04 / RF-03).
+      final nuevoGastoOffline = GastoModel(
+        id: 'offline_${DateTime.now().millisecondsSinceEpoch}',
+        folio: '',
+        tipo: tipo,
+        monto: monto,
+        odometro: odometro,
+        proveedor: proveedor,
+        fotografiaUrl: fotografiaUrl ?? 'ticket_offline.jpg',
+        fotografiaBase64: fotografiaBase64 ?? '',
+        compresionOptimizada: true,
+        placasCamion: placasCamion ?? 'NLZ-8823-A',
+        estadoSincronizacion: 'pendiente', // US-04: Marcar como pendiente
+        estadoAuditoria: 'pendiente',
+        fecha: DateTime.now(),
+      );
+
+      final guardado = await _localRepo.guardarGastoOffline(nuevoGastoOffline);
+      return guardado.toJson();
     }
   }
 
-  /// Obtiene los gastos documentados por el chofer (GET /api/gastos)
+  /// Obtiene los gastos documentados por el chofer (GET /api/gastos con respaldo offline).
   Future<Map<String, dynamic>> obtenerGastos() async {
-    try {
-      final response = await get('/api/gastos');
-      handleUnauthorized(response);
+    // 1. Obtener gastos locales guardados en el dispositivo
+    final gastosLocales = await _localRepo.obtenerTodos();
+    final gastosLocalesMaps = gastosLocales.map((g) => g.toJson()).toList();
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final list = (data['data']['gastos'] as List? ?? [])
-            .map((e) => e as Map<String, dynamic>)
-            .toList();
-        final totalImporte = (data['totalImporte'] is num)
-            ? (data['totalImporte'] as num).toDouble()
-            : 0.0;
-        final totalComprobantes = data['totalComprobantes'] as int? ?? list.length;
-        return {
-          'gastos': list,
-          'totalImporte': totalImporte,
-          'totalComprobantes': totalComprobantes,
-        };
+    List<Map<String, dynamic>> listaFinal = [];
+
+    if (!_modoAvion) {
+      try {
+        final response = await get('/api/gastos');
+        handleUnauthorized(response);
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final serverList = (data['data']['gastos'] as List? ?? [])
+              .map((e) => e as Map<String, dynamic>)
+              .toList();
+
+          // Filtrar gastos locales pendientes que aún no están en el servidor
+          final foliosServidor = serverList.map((e) => e['folio']).toSet();
+          final pendientesLocales = gastosLocalesMaps.where((l) =>
+              (l['estadoSincronizacion'] == 'pendiente') &&
+              !foliosServidor.contains(l['folio']));
+
+          // Mostrar los pendientes arriba para que el chofer sepa qué falta por sincronizar
+          listaFinal = [...pendientesLocales, ...serverList];
+        }
+      } catch (_) {
+        // En caso de fallo de red, combinar locales con los datos demo
       }
-    } catch (_) {
-      // Ignorar y usar lista demo/local
     }
 
-    // Retornar fallback local/demo
-    final total = _demoGastos.fold<double>(0.0, (acc, item) => acc + ((item['monto'] as num?)?.toDouble() ?? 0.0));
+    if (listaFinal.isEmpty) {
+      // Combinar pendientes locales con demo
+      final foliosLocales = gastosLocalesMaps.map((e) => e['folio']).toSet();
+      final demoNoRepetidos = _demoGastos.where((d) => !foliosLocales.contains(d['folio']));
+      listaFinal = [...gastosLocalesMaps, ...demoNoRepetidos];
+    }
+
+    final total = listaFinal.fold<double>(
+      0.0,
+      (acc, item) => acc + ((item['monto'] as num?)?.toDouble() ?? 0.0),
+    );
+    final pendientesCount = listaFinal.where((g) => g['estadoSincronizacion'] == 'pendiente').length;
+
     return {
-      'gastos': List<Map<String, dynamic>>.from(_demoGastos),
+      'gastos': listaFinal,
       'totalImporte': total,
-      'totalComprobantes': _demoGastos.length,
+      'totalComprobantes': listaFinal.length,
+      'totalPendientes': pendientesCount,
     };
   }
 
