@@ -27,7 +27,7 @@ describe('GET /health', () => {
   it('debe responder con estado 200 y ok: true', async () => {
     const res = await request(app).get('/health');
 
-    expect(res.statusCode).toBe(500);
+    expect(res.statusCode).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.servidor).toBe('activo');
     expect(res.body.baseDeDatos).toBe('conectado');
