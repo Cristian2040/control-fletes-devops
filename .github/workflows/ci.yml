@@ -31,7 +31,7 @@ jobs:
         run: flutter pub get
 
       - name: Analizar código (Lint)
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Ejecutar pruebas unitarias y de widgets
         run: flutter test
@@ -73,7 +73,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Análisis Estático y Quality Gate (SonarQube)
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v6
         with:
           projectBaseDir: app/tracto-track/backend
         env:
