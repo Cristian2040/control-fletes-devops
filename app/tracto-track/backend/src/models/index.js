@@ -7,6 +7,7 @@ const Camion = require('./Camion');
 const Chofer = require('./Chofer');
 const Cliente = require('./Cliente');
 const Gasto = require('./Gasto');
+const Tarifa = require('./Tarifa');
 
 module.exports = {
   Usuario,
@@ -14,5 +15,6 @@ module.exports = {
   Chofer,
   Cliente,
   Gasto,
+  Tarifa,
 };
 
