@@ -50,8 +50,10 @@ async function asegurarDatosSemilla() {
   } catch (_) {}
 }
 
-// Inicializar semillas en memoria si está vacío
-asegurarDatosSemilla();
+// Inicializar semillas en memoria si está vacío (solo en entornos fuera de pruebas)
+if (process.env.NODE_ENV !== 'test') {
+  asegurarDatosSemilla();
+}
 
 // ==========================================
 // 1. CAMIONES (A-05, A-09)
