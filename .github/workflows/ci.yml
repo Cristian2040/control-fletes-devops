@@ -1,59 +1,89 @@
-name: CI
+name: CI - Pipeline Tracto Trak
 
-# Se ejecuta en cada push a develop y en cada Pull Request hacia main.
+# Se ejecuta en push y PR hacia las ramas principales (main y develop)
 on:
   push:
-    branches: [develop]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
+  # ====================================================================
+  # JOB 1: Frontend Móvil (Flutter)
+  # ====================================================================
   mobile:
-    name: Flutter - analyze & test
+    name: Flutter - Analizar y Probar
     runs-on: ubuntu-latest
-    # Este job asume que el código Flutter vive en /app/mobile
     defaults:
       run:
-        working-directory: app/mobile
+        working-directory: app/tracto-track/frontend
     steps:
-      - uses: actions/checkout@v4
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
 
       - name: Configurar Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
 
       - name: Instalar dependencias
         run: flutter pub get
 
-      - name: Analizar código (lint)
+      - name: Analizar código (Lint)
         run: flutter analyze
 
-      - name: Ejecutar pruebas unitarias/widget
+      - name: Ejecutar pruebas unitarias y de widgets
         run: flutter test
 
+      - name: Notificar fallo de Flutter en Discord
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "{\"content\": \"❌ **¡Pipeline CI Falló en Frontend Móvil (Flutter)!**\n\n• **Rama:** \`${{ github.ref_name }}\`\n• **Autor:** \`${{ github.actor }}\`\n• **Commit:** ${{ github.event.head_commit.message }}\n🔗 [Ver ejecución del Pipeline](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}" \
+               ${{ secrets.DISCORD_WEBHOOK }}
+
+  # ====================================================================
+  # JOB 2: Backend API REST (Node.js + Jest + SonarQube)
+  # ====================================================================
   backend:
-    name: Node/Express - lint & test
+    name: Node.js - Pruebas, Cobertura y SonarQube
     runs-on: ubuntu-latest
-    # Este job asume que la API vive en /app/backend
     defaults:
       run:
-        working-directory: app/backend
+        working-directory: app/tracto-track/backend
     steps:
-      - uses: actions/checkout@v4
+      - name: Descargar repositorio (historial completo para SonarQube)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: app/backend/package-lock.json
+          cache-dependency-path: app/tracto-track/backend/package-lock.json
 
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Lint
-        run: npm run lint --if-present
+      - name: Ejecutar pruebas unitarias e integración con cobertura (Jest)
+        run: npm run test:coverage
 
-      - name: Ejecutar pruebas unitarias (Jest)
-        run: npm test --if-present
+      - name: Análisis Estático y Quality Gate (SonarQube)
+        uses: SonarSource/sonarqube-scan-action@v5
+        with:
+          projectBaseDir: app/tracto-track/backend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: Notificar fallo de Backend / Quality Gate en Discord
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "{\"content\": \"❌ **¡Pipeline CI Falló en Backend / SonarQube Quality Gate!**\n\n• **Rama:** \`${{ github.ref_name }}\`\n• **Autor:** \`${{ github.actor }}\`\n• **Commit:** ${{ github.event.head_commit.message }}\n🔗 [Ver ejecución del Pipeline](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}" \
+               ${{ secrets.DISCORD_WEBHOOK }}

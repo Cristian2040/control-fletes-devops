@@ -14,6 +14,7 @@ const { notFound, errorHandler } = require('./middlewares/errorHandler');
 const healthRoutes = require('./routes/health');
 const authRoutes = require('./routes/auth');
 const gastosRoutes = require('./routes/gastos');
+const mecanicaRoutes = require('./routes/mecanica');
 
 const app = express();
 
@@ -32,6 +33,7 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/gastos', gastosRoutes);
+app.use('/api/mecanica', mecanicaRoutes);
 
 
 // --- Manejo de errores ---

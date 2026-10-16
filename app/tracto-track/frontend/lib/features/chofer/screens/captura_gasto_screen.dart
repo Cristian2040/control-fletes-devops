@@ -215,19 +215,24 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.local_shipping, size: 18, color: AppTheme.primaryBlue),
-              SizedBox(width: 8),
-              Text(
-                'Kenworth T680 · NLZ-8823-A',
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+          const Expanded(
+            child: Row(
+              children: [
+                Icon(Icons.local_shipping, size: 18, color: AppTheme.primaryBlue),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Kenworth T680 · NLZ-8823-A',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -589,14 +594,17 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 16),
-                              SizedBox(width: 4),
-                              Text(
-                                'Fotografía Adjuntada y Optimizada',
-                                style: TextStyle(
-                                  color: AppTheme.textPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
+                              const Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 16),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: const Text(
+                                  'Fotografía Adjuntada y Optimizada',
+                                  style: TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
