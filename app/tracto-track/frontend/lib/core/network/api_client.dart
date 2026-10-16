@@ -36,13 +36,15 @@ class ApiClient {
   final ValueNotifier<bool> isOnlineNotifier = ValueNotifier<bool>(true);
 
   Timer? _autoSyncTimer;
+  bool _sincronizandoPendientes = false;
+  bool get isSincronizando => _sincronizandoPendientes;
 
   /// Alterna o define el estado de conexión (Modo Avión vs Online).
-  /// Al restaurar la conexión, desencadena sincronización automática inmediata (US-05).
-  void setModoAvion(bool activo) {
+  /// Al restaurar la conexión, desencadena sincronización automática si sincronizar=true (US-05).
+  void setModoAvion(bool activo, {bool sincronizar = true}) {
     _modoAvion = activo;
     isOnlineNotifier.value = !activo;
-    if (!activo) {
+    if (!activo && sincronizar) {
       sincronizarPendientes();
     }
   }
@@ -473,73 +475,109 @@ class ApiClient {
   /// Transmite hacia MongoDB los registros locales pendientes, obtiene el folio
   /// oficial secuencial y actualiza el estado local a 'sincronizado'.
   Future<SyncResult> sincronizarPendientes({bool forzar = false}) async {
-    final pendientes = await _localRepo.obtenerPendientes();
-    pendientesNotifier.value = pendientes.length;
-    if (pendientes.isEmpty) {
-      return const SyncResult(totalPendientes: 0, totalSincronizados: 0, totalErrores: 0);
+    if (_sincronizandoPendientes) {
+      final pCount = await _localRepo.contarPendientes();
+      return SyncResult(totalPendientes: pCount, totalSincronizados: 0, totalErrores: 0);
     }
 
-    if (_modoAvion && !forzar) {
-      return SyncResult(totalPendientes: pendientes.length, totalSincronizados: 0, totalErrores: 0);
-    }
+    _sincronizandoPendientes = true;
+    try {
+      final pendientes = await _localRepo.obtenerPendientes();
+      pendientesNotifier.value = pendientes.length;
+      if (pendientes.isEmpty) {
+        return const SyncResult(totalPendientes: 0, totalSincronizados: 0, totalErrores: 0);
+      }
 
-    int sincronizados = 0;
-    int erroresCount = 0;
-    final List<String> errores = [];
+      if (_modoAvion && !forzar) {
+        return SyncResult(totalPendientes: pendientes.length, totalSincronizados: 0, totalErrores: 0);
+      }
 
-    for (final gasto in pendientes) {
-      try {
-        final payload = {
-          'tipo': gasto.tipo,
-          'monto': gasto.monto,
-          if (gasto.odometro != null) 'odometro': gasto.odometro,
-          'proveedor': gasto.proveedor,
-          'fotografiaUrl': gasto.fotografiaUrl,
-          'fotografiaBase64': gasto.fotografiaBase64,
-          'placasCamion': gasto.placasCamion,
-        };
+      int sincronizados = 0;
+      int erroresCount = 0;
+      final List<String> errores = [];
 
-        // Si tenemos sesión autenticada y conexión activa, transmitir a la API REST MongoDB
-        if (hasToken) {
-          final res = await post('/api/gastos', body: payload);
-          if (res.statusCode == 201) {
-            final data = jsonDecode(res.body);
-            final gastoServidor = data['data']['gasto'] as Map<String, dynamic>;
-            final nuevoFolio = gastoServidor['folio'] as String? ?? '';
+      for (final gasto in pendientes) {
+        try {
+          final payload = {
+            'tipo': gasto.tipo,
+            'monto': gasto.monto,
+            if (gasto.odometro != null) 'odometro': gasto.odometro,
+            'proveedor': gasto.proveedor,
+            'fotografiaUrl': gasto.fotografiaUrl,
+            'fotografiaBase64': gasto.fotografiaBase64,
+            'placasCamion': gasto.placasCamion,
+            'folioOffline': gasto.folio, // Idempotencia: evita duplicados en retransmisiones
+          };
 
-            // Actualizar estado del registro a "sincronizado" tras confirmación del servidor (US-05)
+          // Si tenemos sesión autenticada y conexión activa, transmitir a la API REST MongoDB
+          if (hasToken) {
+            final res = await post('/api/gastos', body: payload);
+            if (res.statusCode == 201 || res.statusCode == 200) {
+              final data = jsonDecode(res.body);
+              final gastoServidor = data['data']['gasto'] as Map<String, dynamic>;
+              final nuevoFolio = gastoServidor['folio'] as String? ?? '';
+
+              // Actualizar estado del registro a "sincronizado" tras confirmación del servidor (US-05)
+              await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
+              sincronizados++;
+              continue;
+            } else if (res.statusCode == 409) {
+              // El comprobante ya existe o fue procesado en MongoDB: sincronizar localmente
+              try {
+                final checkRes = await get('/api/gastos');
+                if (checkRes.statusCode == 200) {
+                  final checkData = jsonDecode(checkRes.body);
+                  final list = (checkData['data']['gastos'] as List? ?? []);
+                  final match = list.firstWhere(
+                    (item) =>
+                        item['monto'] == gasto.monto &&
+                        item['proveedor'] == gasto.proveedor,
+                    orElse: () => null,
+                  );
+                  if (match != null) {
+                    final serverFolio = match['folio'] as String? ?? '';
+                    await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: serverFolio);
+                    sincronizados++;
+                    continue;
+                  }
+                }
+              } catch (_) {}
+
+              await _localRepo.marcarComoSincronizado(gasto.id);
+              sincronizados++;
+              continue;
+            } else {
+              final errBody = jsonDecode(res.body);
+              final msg = (errBody['errores'] is List)
+                  ? (errBody['errores'] as List).join(', ')
+                  : (errBody['mensaje'] ?? errBody['message'] ?? 'HTTP ${res.statusCode}');
+              erroresCount++;
+              errores.add('Fallo al sincronizar ${gasto.folio}: $msg');
+            }
+          } else {
+            // Modo demo o prueba local: asignar folio consecutivo oficial y marcar como sincronizado
+            final nuevoFolio = '#TT-${(144 + sincronizados).toString().padLeft(6, '0')}';
             await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
             sincronizados++;
-            continue;
-          } else {
-            final errBody = jsonDecode(res.body);
-            final msg = (errBody['errores'] is List)
-                ? (errBody['errores'] as List).join(', ')
-                : (errBody['message'] ?? errBody['mensaje'] ?? 'HTTP ${res.statusCode}');
-            erroresCount++;
-            errores.add('Fallo al sincronizar ${gasto.folio}: $msg');
           }
-        } else {
-          // Modo demo o prueba local: asignar folio consecutivo oficial y marcar como sincronizado
-          final nuevoFolio = '#TT-${(144 + sincronizados).toString().padLeft(6, '0')}';
-          await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
-          sincronizados++;
+        } catch (e) {
+          erroresCount++;
+          errores.add('Error al sincronizar ${gasto.folio}: $e');
         }
-      } catch (e) {
-        erroresCount++;
-        errores.add('Error al sincronizar ${gasto.folio}: $e');
       }
+
+      final pendientesRestantes = await _localRepo.contarPendientes();
+      pendientesNotifier.value = pendientesRestantes;
+
+      return SyncResult(
+        totalPendientes: pendientes.length,
+        totalSincronizados: sincronizados,
+        totalErrores: erroresCount,
+        errores: errores,
+      );
+    } finally {
+      _sincronizandoPendientes = false;
     }
-
-    final pendientesRestantes = await _localRepo.contarPendientes();
-    pendientesNotifier.value = pendientesRestantes;
-
-    return SyncResult(
-      totalPendientes: pendientes.length,
-      totalSincronizados: sincronizados,
-      totalErrores: erroresCount,
-      errores: errores,
-    );
   }
 
   // ========================================================

@@ -184,7 +184,7 @@ class _RutaScreenState extends State<RutaScreen> {
                   borderRadius: BorderRadius.circular(20),
                   onTap: () async {
                     final nuevoModo = !_apiClient.isModoAvion;
-                    _apiClient.setModoAvion(nuevoModo);
+                    _apiClient.setModoAvion(nuevoModo, sincronizar: false);
                     setState(() {});
                     if (!nuevoModo) {
                       await _sincronizarAhora();
