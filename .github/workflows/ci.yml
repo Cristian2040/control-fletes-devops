@@ -78,7 +78,7 @@ jobs:
           projectBaseDir: app/tracto-track/backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_HOST_URL: https://sonarcloud.io
 
       - name: Notificar fallo de Backend / Quality Gate en Discord
         if: failure()
