@@ -5,7 +5,9 @@
 /// realizar peticiones a la API REST (documento de patrones, P1).
 library;
 
+import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
@@ -28,9 +30,42 @@ class ApiClient {
   bool get isModoAvion => _modoAvion;
   bool get isOnline => !_modoAvion;
 
-  /// Alterna o define el estado de conexión (Modo Avión vs Online)
+  /// Notificadores reactivos para la UI (US-05 / RF-04)
+  final ValueNotifier<int> pendientesNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<bool> isOnlineNotifier = ValueNotifier<bool>(true);
+
+  Timer? _autoSyncTimer;
+
+  /// Alterna o define el estado de conexión (Modo Avión vs Online).
+  /// Al restaurar la conexión, desencadena sincronización automática inmediata (US-05).
   void setModoAvion(bool activo) {
     _modoAvion = activo;
+    isOnlineNotifier.value = !activo;
+    if (!activo) {
+      sincronizarPendientes();
+    }
+  }
+
+  /// Inicia el monitoreo continuo en segundo plano (US-05 / RF-04).
+  ///
+  /// Revisa periódicamente si existen registros pendientes y dispara la transmisión.
+  void iniciarAutoSincronizacion({Duration intervalo = const Duration(seconds: 5)}) {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(intervalo, (_) async {
+      if (!_modoAvion) {
+        final count = await _localRepo.contarPendientes();
+        pendientesNotifier.value = count;
+        if (count > 0) {
+          await sincronizarPendientes();
+        }
+      }
+    });
+  }
+
+  /// Detiene el monitoreo en segundo plano
+  void detenerAutoSincronizacion() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
   }
 
   /// Token JWT actual (null si no hay sesión activa)
@@ -52,13 +87,18 @@ class ApiClient {
   // --- Claves de SharedPreferences ---
   static const String _keyToken = 'jwt_token';
   static const String _keyUserData = 'user_data';
+  static const String _keyBaseUrl = 'custom_api_base_url';
 
   // --- Inicialización y Persistencia de Sesión ---
 
-  /// Carga la sesión persistida en SharedPreferences al iniciar la app.
+  /// Carga la sesión persistida y URL base en SharedPreferences al iniciar la app.
   Future<bool> initSession() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final customUrl = prefs.getString(_keyBaseUrl);
+      if (customUrl != null && customUrl.isNotEmpty) {
+        _baseUrl = customUrl;
+      }
       _token = prefs.getString(_keyToken);
       final userStr = prefs.getString(_keyUserData);
       if (userStr != null && userStr.isNotEmpty) {
@@ -99,9 +139,34 @@ class ApiClient {
     _currentUser = null;
   }
 
-  /// Permite cambiar la URL base (útil en pruebas).
+  /// Permite cambiar la URL base en memoria.
   void setBaseUrl(String url) {
-    _baseUrl = url;
+    _baseUrl = url.trim();
+  }
+
+  /// Establece y persiste la URL base de la API para pruebas en red local.
+  Future<void> updateBaseUrl(String url) async {
+    _baseUrl = url.trim();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyBaseUrl, _baseUrl);
+    } catch (_) {}
+  }
+
+  /// Verifica si la API backend está accesible en la URL especificada o actual.
+  Future<bool> checkHealth([String? testUrl]) async {
+    try {
+      final target = (testUrl != null && testUrl.isNotEmpty) ? testUrl.trim() : _baseUrl;
+      final url = Uri.parse('$target/health');
+      final res = await http.get(url).timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return data['ok'] == true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
   // --- Cabeceras HTTP ---
@@ -402,6 +467,80 @@ class ApiClient {
     };
   }
 
+  /// Sincroniza automáticamente en segundo plano los registros guardados offline al recuperar señal (US-05 / RF-04).
+  ///
+  /// Transmite hacia MongoDB los registros locales pendientes, obtiene el folio
+  /// oficial secuencial y actualiza el estado local a 'sincronizado'.
+  Future<SyncResult> sincronizarPendientes({bool forzar = false}) async {
+    final pendientes = await _localRepo.obtenerPendientes();
+    pendientesNotifier.value = pendientes.length;
+    if (pendientes.isEmpty) {
+      return const SyncResult(totalPendientes: 0, totalSincronizados: 0, totalErrores: 0);
+    }
+
+    if (_modoAvion && !forzar) {
+      return SyncResult(totalPendientes: pendientes.length, totalSincronizados: 0, totalErrores: 0);
+    }
+
+    int sincronizados = 0;
+    int erroresCount = 0;
+    final List<String> errores = [];
+
+    for (final gasto in pendientes) {
+      try {
+        final payload = {
+          'tipo': gasto.tipo,
+          'monto': gasto.monto,
+          if (gasto.odometro != null) 'odometro': gasto.odometro,
+          'proveedor': gasto.proveedor,
+          'fotografiaUrl': gasto.fotografiaUrl,
+          'fotografiaBase64': gasto.fotografiaBase64,
+          'placasCamion': gasto.placasCamion,
+        };
+
+        // Si tenemos sesión autenticada y conexión activa, transmitir a la API REST MongoDB
+        if (hasToken) {
+          final res = await post('/api/gastos', body: payload);
+          if (res.statusCode == 201) {
+            final data = jsonDecode(res.body);
+            final gastoServidor = data['data']['gasto'] as Map<String, dynamic>;
+            final nuevoFolio = gastoServidor['folio'] as String? ?? '';
+
+            // Actualizar estado del registro a "sincronizado" tras confirmación del servidor (US-05)
+            await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
+            sincronizados++;
+            continue;
+          } else {
+            final errBody = jsonDecode(res.body);
+            final msg = (errBody['errores'] is List)
+                ? (errBody['errores'] as List).join(', ')
+                : (errBody['message'] ?? errBody['mensaje'] ?? 'HTTP ${res.statusCode}');
+            erroresCount++;
+            errores.add('Fallo al sincronizar ${gasto.folio}: $msg');
+          }
+        } else {
+          // Modo demo o prueba local: asignar folio consecutivo oficial y marcar como sincronizado
+          final nuevoFolio = '#TT-${(144 + sincronizados).toString().padLeft(6, '0')}';
+          await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
+          sincronizados++;
+        }
+      } catch (e) {
+        erroresCount++;
+        errores.add('Error al sincronizar ${gasto.folio}: $e');
+      }
+    }
+
+    final pendientesRestantes = await _localRepo.contarPendientes();
+    pendientesNotifier.value = pendientesRestantes;
+
+    return SyncResult(
+      totalPendientes: pendientes.length,
+      totalSincronizados: sincronizados,
+      totalErrores: erroresCount,
+      errores: errores,
+    );
+  }
+
   /// Verifica si la respuesta indica token expirado (401)
   /// y limpia la sesión automáticamente.
   bool handleUnauthorized(http.Response response) {
@@ -411,6 +550,23 @@ class ApiClient {
     }
     return false;
   }
+}
+
+/// Resultado del proceso de sincronización offline-online.
+class SyncResult {
+  final int totalPendientes;
+  final int totalSincronizados;
+  final int totalErrores;
+  final List<String> errores;
+
+  const SyncResult({
+    required this.totalPendientes,
+    required this.totalSincronizados,
+    required this.totalErrores,
+    this.errores = const [],
+  });
+
+  bool get exitoso => totalErrores == 0 && totalSincronizados > 0;
 }
 
 

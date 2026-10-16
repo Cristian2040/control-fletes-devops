@@ -13,6 +13,7 @@ import 'core/network/api_client.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final hasSession = await ApiClient().initSession();
+  ApiClient().iniciarAutoSincronizacion();
   final initialRoute = hasSession
       ? (ApiClient().userRole == 'operador' ? AppRoutes.choferHome : AppRoutes.adminHome)
       : AppRoutes.login;
