@@ -52,8 +52,26 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
     }
   }
 
+  String _filtro = 'todos'; // 'todos', 'pendientes', 'sincronizados'
+
+  List<GastoModel> get _gastosFiltrados {
+    switch (_filtro) {
+      case 'pendientes':
+        return _gastos.where((g) => g.isPendiente).toList();
+      case 'sincronizados':
+        return _gastos.where((g) => g.isSincronizado).toList();
+      default:
+        return _gastos;
+    }
+  }
+
+  int get _pendientesCount => _gastos.where((g) => g.isPendiente).length;
+  int get _sincronizadosCount => _gastos.where((g) => g.isSincronizado).length;
+
   @override
   Widget build(BuildContext context) {
+    final listaMostrada = _gastosFiltrados;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
       appBar: AppBar(
@@ -76,25 +94,32 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
             // Barra de Total Acumulado
             _buildBarraTotal(),
 
+            // Filtros segmentados (Todos / Pendientes offline / Sincronizados)
+            _buildFiltros(),
+
             // Lista de Comprobantes
             Expanded(
               child: _cargando
                   ? const Center(
                       child: CircularProgressIndicator(color: AppTheme.primaryBlue),
                     )
-                  : _gastos.isEmpty
-                      ? const Center(
+                  : listaMostrada.isEmpty
+                      ? Center(
                           child: Text(
-                            'No se han registrado comprobantes en la bitácora',
-                            style: TextStyle(color: AppTheme.textSecondary),
+                            _filtro == 'pendientes'
+                                ? 'No hay comprobantes pendientes de sincronización'
+                                : _filtro == 'sincronizados'
+                                    ? 'No hay comprobantes sincronizados'
+                                    : 'No se han registrado comprobantes en la bitácora',
+                            style: const TextStyle(color: AppTheme.textSecondary),
                           ),
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.all(16),
-                          itemCount: _gastos.length,
+                          itemCount: listaMostrada.length,
                           separatorBuilder: (_, __) => const SizedBox(height: 12),
                           itemBuilder: (context, index) {
-                            final gasto = _gastos[index];
+                            final gasto = listaMostrada[index];
                             return _buildTarjetaGasto(gasto);
                           },
                         ),
@@ -103,6 +128,58 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
         ),
       ),
       bottomNavigationBar: const ChoferBottomNavBar(currentIndex: 1),
+    );
+  }
+
+  Widget _buildFiltros() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: AppTheme.surfaceDark,
+      child: Row(
+        children: [
+          _buildChipFiltro('todos', 'Todos (${_gastos.length})'),
+          const SizedBox(width: 8),
+          _buildChipFiltro(
+            'pendientes',
+            'Pendientes ($_pendientesCount)',
+            esAdvertencia: _pendientesCount > 0,
+          ),
+          const SizedBox(width: 8),
+          _buildChipFiltro('sincronizados', 'Sincronizados ($_sincronizadosCount)'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChipFiltro(String keyFiltro, String label, {bool esAdvertencia = false}) {
+    final seleccionado = _filtro == keyFiltro;
+    final colorActivo = esAdvertencia ? AppColors.warning : AppTheme.primaryBlue;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => setState(() => _filtro = keyFiltro),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: seleccionado ? colorActivo : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: seleccionado ? colorActivo : Colors.white24,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: seleccionado
+                ? (esAdvertencia ? Colors.black : Colors.white)
+                : AppTheme.textSecondary,
+            fontSize: 12,
+            fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
     );
   }
 
@@ -288,8 +365,9 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
                   ],
                 ),
               ),
-              const StatusBadge(
-                label: 'SINCRONIZADO',
+              StatusBadge(
+                label: gasto.isPendiente ? 'PENDIENTE DE SINCRONIZACIÓN' : 'SINCRONIZADO',
+                showIcon: true,
               ),
 
             ],

@@ -133,4 +133,62 @@ Registro de entregas por Sprint, con lo construido, pruebas y decisiones.
 - Backend: `backend/test/gastos.test.js` + `test/auth.test.js` + `test/health.test.js` (27 pruebas aprobadas).
 - Frontend: `frontend/test/sprint3_test.dart` + `test/sprint1_test.dart` (27 pruebas aprobadas).
 
+---
+
+## Sprint 4 — Almacenamiento Local Offline (US-04, RF-03)
+
+**Fecha:** Octubre 2026
+
+### Entregables
+
+#### Punto 1: Integrar base de datos local en el dispositivo (almacenamiento embebido de Flutter)
+- **Data Source Local `LocalGastoStorage`** (`lib/data/datasources/local_gasto_storage.dart`):
+  - Almacenamiento persistente basado en `SharedPreferences` con respaldo en memoria seguro (`_inMemoryStore`).
+  - Serialización y deserialización de listas de comprobantes en JSON.
+  - Generación de secuencias numéricas seguras para folios offline.
+  - Métodos: `readAllRaw()`, `writeAllRaw()`, `insertRaw()`, `getNextSequence()`, `clearAll()`.
+- **Repositorio Local `LocalGastoRepository`** (`lib/data/repositories/local_gasto_repository.dart`):
+  - Manejo de objetos de dominio `GastoModel` y aislamiento de la capa de persistencia.
+  - `guardarGastoOffline(GastoModel)`: Asigna folio `#TT-OFF-######` y bandera `estadoSincronizacion = 'pendiente'`.
+  - Consultas: `obtenerTodos()`, `obtenerPendientes()`, `obtenerSincronizados()`, `contarPendientes()`.
+  - Actualizaciones: `marcarComoSincronizado(id, nuevoFolio)` y `eliminar(id)`.
+
+#### Punto 2: Adaptar el flujo de captura de gastos para guardar localmente sin red
+- **Soporte Offline en `ApiClient`** (`lib/core/network/api_client.dart`):
+  - Integración del Singleton `LocalGastoRepository`.
+  - Banderas de control de conectividad: `_modoAvion`, `isModoAvion`, `isOnline` y `setModoAvion(bool)`.
+  - `registrarGasto(...)`: Guarda automáticamente en el almacenamiento local embebido cuando no hay señal celular o la red falla, preservando intacta la fotografía en Base64.
+  - `obtenerGastos(...)`: Combina los registros locales pendientes priorizados en la parte superior con los registros del servidor o demo, calculando totales de importe y comprobantes.
+- **Formulario C-03 `CapturaGastoScreen`** (`lib/features/chofer/screens/captura_gasto_screen.dart`):
+  - Indicador de estado de conexión `OnlineIndicator` visible en la barra superior.
+  - Banner informativo en modo offline: "Modo Fuera de Línea (Sin Señal Celular) — El comprobante y la fotografía se guardarán de forma segura en el almacenamiento local del dispositivo (US-04 / RF-03)".
+  - Botón adaptativo: "Guardar en Dispositivo (Offline)" frente a "Guardar y Transmitir Registro".
+
+#### Punto 3: Implementar bandera de estado "pendiente de sincronización"
+- **Modelo `GastoModel`** (`lib/data/models/gasto_model.dart`):
+  - Getters `isPendiente`, `isSincronizado`, `estadoSincronizacionLegible` y método `copyWith()`.
+- **Componente `StatusBadge`** (`lib/shared/widgets/status_badge.dart`):
+  - Soporte de íconos semánticos (`showIcon: true`): nube tachada (`Icons.cloud_off`) para `'PENDIENTE DE SINCRONIZACIÓN'` y nube con check (`Icons.cloud_done`) para `'SINCRONIZADO'`.
+  - Color ámbar de alto contraste (`AppColors.warning`) para estado pendiente.
+- **Pantalla C-02 `RutaScreen`** (`lib/features/chofer/screens/ruta_screen.dart`):
+  - `OnlineIndicator` interactivo en la barra superior que permite alternar y probar el modo offline/online con feedback táctil.
+  - Alerta visual destacada cuando existen tickets pendientes guardados localmente.
+  - Tarjetas de comprobantes recientes con badge dinámico `PENDIENTE` / `SINCRONIZADO`.
+- **Pantalla C-04 `RegistroProcesadoScreen`** (`lib/features/chofer/screens/registro_procesado_screen.dart`):
+  - Detecta si el gasto fue guardado offline (`isPendiente`).
+  - Muestra ícono de guardado local, título "Registro Guardado Localmente", badge `PENDIENTE DE SINCRONIZACIÓN` y leyenda informativa de sincronización posterior.
+- **Pantalla C-05 `MisGastosScreen`** (`lib/features/chofer/screens/mis_gastos_screen.dart`):
+  - Barra de filtros segmentados: "Todos (N)", "Pendientes (N)", "Sincronizados (N)".
+  - Badge dinámico en cada comprobante del historial.
+
+#### Punto 4: Pruebas automatizadas en modo avión / sin red
+- **Suite de Pruebas `frontend/test/sprint4_test.dart`**:
+  - Test unitarios del almacenamiento local embebido y repositorio.
+  - Test del escenario BDD US-04 (RF-03): registro de gasto y fotografía sin red celular.
+  - Test de alternancia de conexión y widgets C-02, C-03, C-04 y C-05.
+- **Resultados de Validación**:
+  - Backend: 27/27 pruebas Jest pasando (`backend/test/*.test.js`).
+  - Frontend: 37/37 pruebas Flutter pasando (`test/sprint1_test.dart`, `test/sprint3_test.dart`, `test/sprint4_test.dart`).
+
+
 

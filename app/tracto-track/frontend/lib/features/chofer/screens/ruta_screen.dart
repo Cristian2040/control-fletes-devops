@@ -92,11 +92,35 @@ class _RutaScreenState extends State<RutaScreen> {
             ),
           ],
         ),
-        actions: const [
+        actions: [
           Padding(
-            padding: EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.only(right: 16),
             child: Center(
-              child: OnlineIndicator(isOnline: true),
+              child: Tooltip(
+                message: 'Tocar para simular modo offline/online',
+                child: InkWell(
+                  key: const Key('btn_toggle_online'),
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    final nuevoModo = !_apiClient.isModoAvion;
+                    _apiClient.setModoAvion(nuevoModo);
+                    setState(() {});
+                    _cargarDatos();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          nuevoModo
+                              ? 'Modo Fuera de Línea / Avión activado (RF-03)'
+                              : 'Conexión restaurada (ONLINE)',
+                        ),
+                        backgroundColor: nuevoModo ? AppColors.warning : AppColors.online,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  child: OnlineIndicator(isOnline: _apiClient.isOnline),
+                ),
+              ),
             ),
           ),
         ],
@@ -110,6 +134,9 @@ class _RutaScreenState extends State<RutaScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Alerta de gastos guardados localmente pendientes de sincronización (US-04)
+              _buildAlertaGastosPendientes(),
+
               // 1. Encabezado Operador Asignado
               _buildHeaderOperador(),
               const SizedBox(height: 16),
@@ -129,6 +156,42 @@ class _RutaScreenState extends State<RutaScreen> {
         ),
       ),
       bottomNavigationBar: const ChoferBottomNavBar(currentIndex: 0),
+    );
+  }
+
+  Widget _buildAlertaGastosPendientes() {
+    final pendientes = _gastosRecientes.where((g) => g.isPendiente).toList();
+    if (pendientes.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.warning.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off, color: AppColors.warning, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${pendientes.length} comprobante${pendientes.length > 1 ? "s" : ""} pendiente${pendientes.length > 1 ? "s" : ""} de sincronización guardado${pendientes.length > 1 ? "s" : ""} localmente (US-04)',
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const StatusBadge(
+            label: 'OFFLINE',
+            color: AppColors.warning,
+          ),
+        ],
+      ),
     );
   }
 
@@ -492,8 +555,9 @@ class _RutaScreenState extends State<RutaScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              const StatusBadge(
-                label: 'SINCRONIZADO',
+              StatusBadge(
+                label: gasto.isPendiente ? 'PENDIENTE' : 'SINCRONIZADO',
+                showIcon: true,
               ),
 
             ],

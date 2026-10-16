@@ -32,6 +32,9 @@ class RegistroProcesadoScreen extends StatelessWidget {
         : 'N/A';
     final proveedor = gastoActual?.proveedor ?? 'OXXO GAS Saltillo';
 
+    final esPendiente = gastoActual?.isPendiente ?? false;
+    final estadoColor = esPendiente ? AppColors.warning : AppTheme.accentGreen;
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
       appBar: AppBar(
@@ -58,21 +61,21 @@ class RegistroProcesadoScreen extends StatelessWidget {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: AppTheme.accentGreen.withOpacity(0.15),
+                  color: estadoColor.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.accentGreen, width: 2),
+                  border: Border.all(color: estadoColor, width: 2),
                 ),
-                child: const Icon(
-                  Icons.check,
-                  color: AppTheme.accentGreen,
+                child: Icon(
+                  esPendiente ? Icons.cloud_off : Icons.check,
+                  color: estadoColor,
                   size: 46,
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Registro Procesado',
-              style: TextStyle(
+            Text(
+              esPendiente ? 'Registro Guardado Localmente' : 'Registro Procesado',
+              style: const TextStyle(
                 color: AppTheme.textPrimary,
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
@@ -80,9 +83,11 @@ class RegistroProcesadoScreen extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Transmitido a la base de datos central en MongoDB',
-              style: TextStyle(
+            Text(
+              esPendiente
+                  ? 'Guardado en almacenamiento local del dispositivo sin red celular (US-04 / RF-03). Se sincronizará automáticamente al detectar cobertura celular.'
+                  : 'Transmitido a la base de datos central en MongoDB',
+              style: const TextStyle(
                 color: AppTheme.textSecondary,
                 fontSize: 13,
               ),
@@ -113,10 +118,10 @@ class RegistroProcesadoScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const StatusBadge(
-                        label: 'SINCRONIZADO',
+                      StatusBadge(
+                        label: esPendiente ? 'PENDIENTE DE SINCRONIZACIÓN' : 'SINCRONIZADO',
+                        showIcon: true,
                       ),
-
                     ],
                   ),
                   const SizedBox(height: 6),

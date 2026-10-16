@@ -3,6 +3,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/gasto_model.dart';
+import '../../../shared/widgets/online_indicator.dart';
 import '../strategies/gasto_validation_strategy.dart';
 
 
@@ -147,6 +148,14 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: OnlineIndicator(isOnline: _apiClient.isOnline),
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -155,6 +164,12 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Banner de modo offline / sin cobertura celular (US-04, RF-03)
+              if (!_apiClient.isOnline) ...[
+                _buildBannerOffline(),
+                const SizedBox(height: 12),
+              ],
+
               // Banner de unidad y compresión activa
               _buildBannerUnidad(),
               const SizedBox(height: 20),
@@ -613,6 +628,47 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
     );
   }
 
+  Widget _buildBannerOffline() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.warning, width: 1),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cloud_off, color: AppColors.warning, size: 22),
+          SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Modo Fuera de Línea (Sin Señal Celular)',
+                  style: TextStyle(
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'El comprobante y la fotografía se guardarán de forma segura en el almacenamiento local del dispositivo (US-04 / RF-03).',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBotonGuardar() {
     return SizedBox(
       width: double.infinity,
@@ -637,9 +693,11 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
                   strokeWidth: 2.5,
                 ),
               )
-            : const Text(
-                'Guardar y Transmitir Registro',
-                style: TextStyle(
+            : Text(
+                _apiClient.isOnline
+                    ? 'Guardar y Transmitir Registro'
+                    : 'Guardar en Dispositivo (Offline)',
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.3,
@@ -649,3 +707,4 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
     );
   }
 }
+
