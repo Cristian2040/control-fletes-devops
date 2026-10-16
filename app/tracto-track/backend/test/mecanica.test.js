@@ -167,6 +167,15 @@ describe('GET /api/mecanica', () => {
     expect(res.statusCode).toEqual(200);
     expect(res.body.ordenes).toHaveLength(0);
   });
+
+  it('debe filtrar por estado, prioridad, camion y tipoServicio', async () => {
+    const res = await request(app)
+      .get(`/api/mecanica?estado=reportada&prioridad=alta&camion=${camionId}&tipoServicio=correctivo`)
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.statusCode).toEqual(200);
+    expect(res.body.ok).toBe(true);
+  });
 });
 
 describe('GET /api/mecanica/:id', () => {

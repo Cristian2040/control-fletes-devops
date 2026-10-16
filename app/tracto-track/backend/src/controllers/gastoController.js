@@ -129,7 +129,8 @@ exports.listarGastos = async (req, res, next) => {
     if (req.usuario.rol === 'operador') {
       filtro.usuario = usuarioId;
     } else if (req.query.choferId) {
-      filtro.chofer = req.query.choferId;
+      // $eq + String() evita inyección NoSQL (p. ej. ?choferId[$ne]=x)
+      filtro.chofer = { $eq: String(req.query.choferId) };
     }
 
 
@@ -138,7 +139,7 @@ exports.listarGastos = async (req, res, next) => {
     }
 
     if (req.query.estadoAuditoria) {
-      filtro.estadoAuditoria = req.query.estadoAuditoria;
+      filtro.estadoAuditoria = { $eq: String(req.query.estadoAuditoria) };
     }
 
     const gastos = await Gasto.find(filtro)

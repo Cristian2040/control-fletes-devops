@@ -10,4 +10,8 @@ module.exports = {
   jwtSecret: process.env.JWT_SECRET || 'cambiar_este_secreto_en_produccion',
   nodeEnv: process.env.NODE_ENV || 'development',
   storageType: process.env.STORAGE_TYPE || 'local',
+  // Orígenes permitidos por CORS (lista separada por comas). La app móvil no usa CORS.
+  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:8080')
+    .split(',')
+    .map((o) => o.trim()),
 };

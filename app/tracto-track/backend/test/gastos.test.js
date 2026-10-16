@@ -18,6 +18,7 @@ const config = require('../src/config');
 
 let mongoServer;
 let tokenChofer;
+let tokenAdmin;
 let usuarioChoferId;
 
 beforeAll(async () => {
@@ -45,6 +46,20 @@ beforeAll(async () => {
 
   tokenChofer = jwt.sign(
     { id: usuario._id, rol: usuario.rol, username: usuario.username },
+    config.jwtSecret,
+    { expiresIn: '1h' }
+  );
+
+  const admin = await Usuario.create({
+    username: 'admin_test_gastos',
+    password: 'Password123!',
+    nombre: 'Admin Test Gastos',
+    rol: 'administrador',
+    email: 'admin.gastos@tractotrak.com',
+  });
+
+  tokenAdmin = jwt.sign(
+    { id: admin._id, rol: admin.rol, username: admin.username },
     config.jwtSecret,
     { expiresIn: '1h' }
   );
@@ -306,6 +321,28 @@ describe('Endpoints de Gastos (/api/gastos)', () => {
       expect(res.body.totalComprobantes).toBe(2);
       expect(res.body.totalImporte).toBe(2000);
       expect(res.body.data.gastos.length).toBe(2);
+    });
+
+    test('Filtra gastos por choferId, tipo y estadoAuditoria como administrador', async () => {
+      await request(app)
+        .post('/api/gastos')
+        .set('Authorization', `Bearer ${tokenChofer}`)
+        .send({
+          tipo: 'diesel',
+          monto: 1500,
+          odometro: 1000,
+          proveedor: 'Estación 1',
+          fotografiaUrl: 'foto1.jpg',
+        });
+
+      const chofer = await Chofer.findOne({ usuario: usuarioChoferId });
+      const res = await request(app)
+        .get(`/api/gastos?choferId=${chofer._id}&tipo=diesel&estadoAuditoria=pendiente`)
+        .set('Authorization', `Bearer ${tokenAdmin}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+      expect(res.body.data.gastos.length).toBe(1);
     });
   });
 });

@@ -18,6 +18,9 @@ import '../../features/chofer/screens/registro_procesado_screen.dart';
 import '../../features/chofer/screens/mis_gastos_screen.dart';
 import '../../features/chofer/screens/perfil_chofer_screen.dart';
 import '../../features/admin/screens/placeholder_screen.dart';
+import '../../features/mecanica/screens/mecanica_list_screen.dart';
+import '../../features/mecanica/screens/mecanica_form_screen.dart';
+import '../../features/mecanica/screens/mecanica_detalle_screen.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -48,6 +51,11 @@ class AppRoutes {
   static const String adminLiquidacionResumen = '/admin/liquidacion/resumen'; // A-16
   static const String adminPerfil = '/admin/perfil';            // A-17
 
+  // --- Rutas del módulo de Mecánica ---
+  static const String mecanicaList = '/mecanica';
+  static const String mecanicaForm = '/mecanica/nueva';
+  static const String mecanicaDetalle = '/mecanica/detalle';
+
   /// Mapa de rutas de la aplicación.
   static Map<String, WidgetBuilder> get routes {
     return {
@@ -61,6 +69,10 @@ class AppRoutes {
       choferBitacora: (context) => const MisGastosScreen(),
       choferPerfil: (context) => const PerfilChoferScreen(),
 
+      // Módulo Mecánica
+      mecanicaList: (context) => const MecanicaListScreen(),
+      mecanicaForm: (context) => const MecanicaFormScreen(),
+      mecanicaDetalle: (context) => const MecanicaDetalleScreen(),
 
       // Módulo Administrador — placeholders hasta sus Sprints correspondientes
       adminHome: (context) => const AdminPlaceholderScreen(

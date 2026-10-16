@@ -90,10 +90,11 @@ const listarOrdenes = async (req, res, next) => {
   try {
     const filtro = { activo: true };
 
-    if (req.query.estado) filtro.estado = req.query.estado;
-    if (req.query.prioridad) filtro.prioridad = req.query.prioridad;
-    if (req.query.camion) filtro.camion = req.query.camion;
-    if (req.query.tipoServicio) filtro.tipoServicio = req.query.tipoServicio;
+    // $eq + String() evita inyección NoSQL (p. ej. ?estado[$ne]=x)
+    if (req.query.estado) filtro.estado = { $eq: String(req.query.estado) };
+    if (req.query.prioridad) filtro.prioridad = { $eq: String(req.query.prioridad) };
+    if (req.query.camion) filtro.camion = { $eq: String(req.query.camion) };
+    if (req.query.tipoServicio) filtro.tipoServicio = { $eq: String(req.query.tipoServicio) };
 
     const ordenes = await OrdenMecanica.find(filtro)
       .populate('camion', 'placas marca modelo anio estado')
