@@ -10,6 +10,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 
+const config = require('./config');
 const { notFound, errorHandler } = require('./middlewares/errorHandler');
 const healthRoutes = require('./routes/health');
 const authRoutes = require('./routes/auth');
@@ -20,7 +21,7 @@ const app = express();
 
 // --- Middlewares globales ---
 app.use(helmet());                         // Cabeceras de seguridad
-app.use(cors());                           // CORS habilitado para desarrollo
+app.use(cors({ origin: config.corsOrigins }));  // CORS restringido a orígenes permitidos (CORS_ORIGIN)
 app.use(express.json({ limit: '10mb' }));  // Parseo de JSON (hasta 10 MB para imágenes base64)
 app.use(express.urlencoded({ extended: true }));
 
