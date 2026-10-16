@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
 
 import '../../data/models/gasto_model.dart';
+import '../../data/models/catalogo_models.dart';
 import '../../data/repositories/local_gasto_repository.dart';
 
 class ApiClient {
@@ -35,13 +36,15 @@ class ApiClient {
   final ValueNotifier<bool> isOnlineNotifier = ValueNotifier<bool>(true);
 
   Timer? _autoSyncTimer;
+  bool _sincronizandoPendientes = false;
+  bool get isSincronizando => _sincronizandoPendientes;
 
   /// Alterna o define el estado de conexión (Modo Avión vs Online).
-  /// Al restaurar la conexión, desencadena sincronización automática inmediata (US-05).
-  void setModoAvion(bool activo) {
+  /// Al restaurar la conexión, desencadena sincronización automática si sincronizar=true (US-05).
+  void setModoAvion(bool activo, {bool sincronizar = true}) {
     _modoAvion = activo;
     isOnlineNotifier.value = !activo;
-    if (!activo) {
+    if (!activo && sincronizar) {
       sincronizarPendientes();
     }
   }
@@ -472,73 +475,522 @@ class ApiClient {
   /// Transmite hacia MongoDB los registros locales pendientes, obtiene el folio
   /// oficial secuencial y actualiza el estado local a 'sincronizado'.
   Future<SyncResult> sincronizarPendientes({bool forzar = false}) async {
-    final pendientes = await _localRepo.obtenerPendientes();
-    pendientesNotifier.value = pendientes.length;
-    if (pendientes.isEmpty) {
-      return const SyncResult(totalPendientes: 0, totalSincronizados: 0, totalErrores: 0);
+    if (_sincronizandoPendientes) {
+      final pCount = await _localRepo.contarPendientes();
+      return SyncResult(totalPendientes: pCount, totalSincronizados: 0, totalErrores: 0);
     }
 
-    if (_modoAvion && !forzar) {
-      return SyncResult(totalPendientes: pendientes.length, totalSincronizados: 0, totalErrores: 0);
-    }
+    _sincronizandoPendientes = true;
+    try {
+      final pendientes = await _localRepo.obtenerPendientes();
+      pendientesNotifier.value = pendientes.length;
+      if (pendientes.isEmpty) {
+        return const SyncResult(totalPendientes: 0, totalSincronizados: 0, totalErrores: 0);
+      }
 
-    int sincronizados = 0;
-    int erroresCount = 0;
-    final List<String> errores = [];
+      if (_modoAvion && !forzar) {
+        return SyncResult(totalPendientes: pendientes.length, totalSincronizados: 0, totalErrores: 0);
+      }
 
-    for (final gasto in pendientes) {
-      try {
-        final payload = {
-          'tipo': gasto.tipo,
-          'monto': gasto.monto,
-          if (gasto.odometro != null) 'odometro': gasto.odometro,
-          'proveedor': gasto.proveedor,
-          'fotografiaUrl': gasto.fotografiaUrl,
-          'fotografiaBase64': gasto.fotografiaBase64,
-          'placasCamion': gasto.placasCamion,
-        };
+      int sincronizados = 0;
+      int erroresCount = 0;
+      final List<String> errores = [];
 
-        // Si tenemos sesión autenticada y conexión activa, transmitir a la API REST MongoDB
-        if (hasToken) {
-          final res = await post('/api/gastos', body: payload);
-          if (res.statusCode == 201) {
-            final data = jsonDecode(res.body);
-            final gastoServidor = data['data']['gasto'] as Map<String, dynamic>;
-            final nuevoFolio = gastoServidor['folio'] as String? ?? '';
+      for (final gasto in pendientes) {
+        try {
+          final payload = {
+            'tipo': gasto.tipo,
+            'monto': gasto.monto,
+            if (gasto.odometro != null) 'odometro': gasto.odometro,
+            'proveedor': gasto.proveedor,
+            'fotografiaUrl': gasto.fotografiaUrl,
+            'fotografiaBase64': gasto.fotografiaBase64,
+            'placasCamion': gasto.placasCamion,
+            'folioOffline': gasto.folio, // Idempotencia: evita duplicados en retransmisiones
+          };
 
-            // Actualizar estado del registro a "sincronizado" tras confirmación del servidor (US-05)
+          // Si tenemos sesión autenticada y conexión activa, transmitir a la API REST MongoDB
+          if (hasToken) {
+            final res = await post('/api/gastos', body: payload);
+            if (res.statusCode == 201 || res.statusCode == 200) {
+              final data = jsonDecode(res.body);
+              final gastoServidor = data['data']['gasto'] as Map<String, dynamic>;
+              final nuevoFolio = gastoServidor['folio'] as String? ?? '';
+
+              // Actualizar estado del registro a "sincronizado" tras confirmación del servidor (US-05)
+              await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
+              sincronizados++;
+              continue;
+            } else if (res.statusCode == 409) {
+              // El comprobante ya existe o fue procesado en MongoDB: sincronizar localmente
+              try {
+                final checkRes = await get('/api/gastos');
+                if (checkRes.statusCode == 200) {
+                  final checkData = jsonDecode(checkRes.body);
+                  final list = (checkData['data']['gastos'] as List? ?? []);
+                  final match = list.firstWhere(
+                    (item) =>
+                        item['monto'] == gasto.monto &&
+                        item['proveedor'] == gasto.proveedor,
+                    orElse: () => null,
+                  );
+                  if (match != null) {
+                    final serverFolio = match['folio'] as String? ?? '';
+                    await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: serverFolio);
+                    sincronizados++;
+                    continue;
+                  }
+                }
+              } catch (_) {}
+
+              await _localRepo.marcarComoSincronizado(gasto.id);
+              sincronizados++;
+              continue;
+            } else {
+              final errBody = jsonDecode(res.body);
+              final msg = (errBody['errores'] is List)
+                  ? (errBody['errores'] as List).join(', ')
+                  : (errBody['mensaje'] ?? errBody['message'] ?? 'HTTP ${res.statusCode}');
+              erroresCount++;
+              errores.add('Fallo al sincronizar ${gasto.folio}: $msg');
+            }
+          } else {
+            // Modo demo o prueba local: asignar folio consecutivo oficial y marcar como sincronizado
+            final nuevoFolio = '#TT-${(144 + sincronizados).toString().padLeft(6, '0')}';
             await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
             sincronizados++;
-            continue;
-          } else {
-            final errBody = jsonDecode(res.body);
-            final msg = (errBody['errores'] is List)
-                ? (errBody['errores'] as List).join(', ')
-                : (errBody['message'] ?? errBody['mensaje'] ?? 'HTTP ${res.statusCode}');
-            erroresCount++;
-            errores.add('Fallo al sincronizar ${gasto.folio}: $msg');
           }
+        } catch (e) {
+          erroresCount++;
+          errores.add('Error al sincronizar ${gasto.folio}: $e');
+        }
+      }
+
+      final pendientesRestantes = await _localRepo.contarPendientes();
+      pendientesNotifier.value = pendientesRestantes;
+
+      return SyncResult(
+        totalPendientes: pendientes.length,
+        totalSincronizados: sincronizados,
+        totalErrores: erroresCount,
+        errores: errores,
+      );
+    } finally {
+      _sincronizandoPendientes = false;
+    }
+  }
+
+  // ========================================================
+  // --- Módulo de Catálogos Operativos (RF-05, Sprint 6) ---
+  // ========================================================
+
+  final List<Map<String, dynamic>> _demoCamiones = [
+    {
+      'id': 'cam_1',
+      'placas': 'NLZ-8823-A',
+      'marca': 'Kenworth',
+      'modelo': 'T680',
+      'anio': 2021,
+      'capacidadCarga': 28.0,
+      'kilometraje': 142500.0,
+      'estado': 'en_ruta',
+    },
+    {
+      'id': 'cam_2',
+      'placas': 'SPF-4412-B',
+      'marca': 'Freightliner',
+      'modelo': 'Cascadia',
+      'anio': 2022,
+      'capacidadCarga': 30.0,
+      'kilometraje': 98200.0,
+      'estado': 'disponible',
+    },
+    {
+      'id': 'cam_3',
+      'placas': 'MTY-9910-C',
+      'marca': 'International',
+      'modelo': 'LT',
+      'anio': 2020,
+      'capacidadCarga': 26.0,
+      'kilometraje': 187400.0,
+      'estado': 'en_taller',
+    },
+  ];
+
+  final List<Map<String, dynamic>> _demoChoferes = [
+    {
+      'id': 'chof_1',
+      'nombre': 'Jorge González',
+      'licencia': 'LF-9928172',
+      'telefono': '811-234-5678',
+      'empresa': 'Transportes Flores S.A.',
+      'estado': 'en_ruta',
+    },
+    {
+      'id': 'chof_2',
+      'nombre': 'Raúl Mendoza',
+      'licencia': 'LF-8812301',
+      'telefono': '818-456-7890',
+      'empresa': 'Transportes Flores S.A.',
+      'estado': 'disponible',
+    },
+    {
+      'id': 'chof_3',
+      'nombre': 'Carlos Herrera',
+      'licencia': 'LF-7723910',
+      'telefono': '812-789-0123',
+      'empresa': 'Transportes Flores S.A.',
+      'estado': 'inactivo',
+    },
+  ];
+
+  final List<Map<String, dynamic>> _demoClientes = [
+    {
+      'id': 'cli_1',
+      'razonSocial': 'CEMEX S.A. de C.V.',
+      'rfc': 'CEM850101XYZ',
+      'diasCredito': 30,
+      'estado': 'activo',
+    },
+    {
+      'id': 'cli_2',
+      'razonSocial': 'Gruma Internacional',
+      'rfc': 'GRU900215ABC',
+      'diasCredito': 15,
+      'estado': 'activo',
+    },
+    {
+      'id': 'cli_3',
+      'razonSocial': 'Ternium México',
+      'rfc': 'TER050820DEF',
+      'diasCredito': 45,
+      'estado': 'activo',
+    },
+  ];
+
+  final List<Map<String, dynamic>> _demoTarifas = [
+    {
+      'id': 'tar_1',
+      'ruta': 'Monterrey → CDMX',
+      'tipoCarga': 'General',
+      'capacidadTon': 28.0,
+      'montoBase': 18500.0,
+      'estado': 'activa',
+    },
+    {
+      'id': 'tar_2',
+      'ruta': 'San Luis Potosí → GDL',
+      'tipoCarga': 'Refrigerada',
+      'capacidadTon': 24.0,
+      'montoBase': 14200.0,
+      'estado': 'activa',
+    },
+    {
+      'id': 'tar_3',
+      'ruta': 'Querétaro → Monterrey',
+      'tipoCarga': 'General',
+      'capacidadTon': 30.0,
+      'montoBase': 16800.0,
+      'estado': 'activa',
+    },
+  ];
+
+  // --- Camiones ---
+
+  Future<List<CamionModel>> fetchCamiones({String? query, String? estado}) async {
+    if (hasToken && !_modoAvion) {
+      try {
+        final uri = Uri(path: '/api/camiones', queryParameters: {
+          if (query != null && query.isNotEmpty) 'q': query,
+          if (estado != null && estado.isNotEmpty) 'estado': estado,
+        }).toString();
+        final res = await get(uri);
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final list = (data['data']['camiones'] as List? ?? [])
+              .map((e) => CamionModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          return list;
+        }
+      } catch (_) {}
+    }
+
+    var list = _demoCamiones.map((e) => CamionModel.fromJson(e)).toList();
+    if (query != null && query.isNotEmpty) {
+      final q = query.toLowerCase();
+      list = list.where((c) =>
+          c.placas.toLowerCase().contains(q) ||
+          c.marca.toLowerCase().contains(q) ||
+          c.modelo.toLowerCase().contains(q)).toList();
+    }
+    if (estado != null && estado.isNotEmpty) {
+      list = list.where((c) => c.estado.toLowerCase() == estado.toLowerCase()).toList();
+    }
+    return list;
+  }
+
+  Future<CamionModel> crearCamion({
+    required String placas,
+    required String marca,
+    required String modelo,
+    required int anio,
+    required double capacidadCarga,
+    String? estado,
+  }) async {
+    final payload = {
+      'placas': placas.toUpperCase().trim(),
+      'marca': marca.trim(),
+      'modelo': modelo.trim(),
+      'anio': anio,
+      'capacidadCarga': capacidadCarga,
+      'estado': estado ?? 'disponible',
+    };
+
+    if (hasToken && !_modoAvion) {
+      try {
+        final res = await post('/api/camiones', body: payload);
+        if (res.statusCode == 201) {
+          final data = jsonDecode(res.body);
+          return CamionModel.fromJson(data['data']['camion']);
         } else {
-          // Modo demo o prueba local: asignar folio consecutivo oficial y marcar como sincronizado
-          final nuevoFolio = '#TT-${(144 + sincronizados).toString().padLeft(6, '0')}';
-          await _localRepo.marcarComoSincronizado(gasto.id, nuevoFolio: nuevoFolio);
-          sincronizados++;
+          final err = jsonDecode(res.body);
+          throw Exception(err['message'] ?? 'Error al guardar camión');
         }
       } catch (e) {
-        erroresCount++;
-        errores.add('Error al sincronizar ${gasto.folio}: $e');
+        if (!e.toString().contains('SocketException')) rethrow;
       }
     }
 
-    final pendientesRestantes = await _localRepo.contarPendientes();
-    pendientesNotifier.value = pendientesRestantes;
-
-    return SyncResult(
-      totalPendientes: pendientes.length,
-      totalSincronizados: sincronizados,
-      totalErrores: erroresCount,
-      errores: errores,
+    final nuevo = CamionModel(
+      id: 'cam_${DateTime.now().millisecondsSinceEpoch}',
+      placas: placas.toUpperCase().trim(),
+      marca: marca.trim(),
+      modelo: modelo.trim(),
+      anio: anio,
+      capacidadCarga: capacidadCarga,
+      estado: estado ?? 'disponible',
     );
+    _demoCamiones.insert(0, nuevo.toJson());
+    return nuevo;
+  }
+
+  // --- Choferes ---
+
+  Future<List<ChoferModel>> fetchChoferes({String? query, String? estado}) async {
+    if (hasToken && !_modoAvion) {
+      try {
+        final uri = Uri(path: '/api/choferes', queryParameters: {
+          if (query != null && query.isNotEmpty) 'q': query,
+          if (estado != null && estado.isNotEmpty) 'estado': estado,
+        }).toString();
+        final res = await get(uri);
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final list = (data['data']['choferes'] as List? ?? [])
+              .map((e) => ChoferModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          return list;
+        }
+      } catch (_) {}
+    }
+
+    var list = _demoChoferes.map((e) => ChoferModel.fromJson(e)).toList();
+    if (query != null && query.isNotEmpty) {
+      final q = query.toLowerCase();
+      list = list.where((c) =>
+          c.nombre.toLowerCase().contains(q) ||
+          c.licencia.toLowerCase().contains(q) ||
+          c.telefono.toLowerCase().contains(q)).toList();
+    }
+    if (estado != null && estado.isNotEmpty) {
+      list = list.where((c) => c.estado.toLowerCase() == estado.toLowerCase()).toList();
+    }
+    return list;
+  }
+
+  Future<ChoferModel> crearChofer({
+    required String nombre,
+    required String licencia,
+    required String telefono,
+    String? empresa,
+    String? estado,
+  }) async {
+    final payload = {
+      'nombre': nombre.trim(),
+      'licencia': licencia.trim(),
+      'telefono': telefono.trim(),
+      'empresa': (empresa ?? 'Transportes Flores S.A.').trim(),
+      'estado': estado ?? 'disponible',
+    };
+
+    if (hasToken && !_modoAvion) {
+      try {
+        final res = await post('/api/choferes', body: payload);
+        if (res.statusCode == 201) {
+          final data = jsonDecode(res.body);
+          return ChoferModel.fromJson(data['data']['chofer']);
+        } else {
+          final err = jsonDecode(res.body);
+          throw Exception(err['message'] ?? 'Error al guardar chofer');
+        }
+      } catch (e) {
+        if (!e.toString().contains('SocketException')) rethrow;
+      }
+    }
+
+    final nuevo = ChoferModel(
+      id: 'chof_${DateTime.now().millisecondsSinceEpoch}',
+      nombre: nombre.trim(),
+      licencia: licencia.trim(),
+      telefono: telefono.trim(),
+      empresa: empresa ?? 'Transportes Flores S.A.',
+      estado: estado ?? 'disponible',
+    );
+    _demoChoferes.insert(0, nuevo.toJson());
+    return nuevo;
+  }
+
+  // --- Clientes ---
+
+  Future<List<ClienteModel>> fetchClientes({String? query, String? estado}) async {
+    if (hasToken && !_modoAvion) {
+      try {
+        final uri = Uri(path: '/api/clientes', queryParameters: {
+          if (query != null && query.isNotEmpty) 'q': query,
+          if (estado != null && estado.isNotEmpty) 'estado': estado,
+        }).toString();
+        final res = await get(uri);
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final list = (data['data']['clientes'] as List? ?? [])
+              .map((e) => ClienteModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          return list;
+        }
+      } catch (_) {}
+    }
+
+    var list = _demoClientes.map((e) => ClienteModel.fromJson(e)).toList();
+    if (query != null && query.isNotEmpty) {
+      final q = query.toLowerCase();
+      list = list.where((c) =>
+          c.razonSocial.toLowerCase().contains(q) ||
+          c.rfc.toLowerCase().contains(q)).toList();
+    }
+    if (estado != null && estado.isNotEmpty) {
+      list = list.where((c) => c.estado.toLowerCase() == estado.toLowerCase()).toList();
+    }
+    return list;
+  }
+
+  Future<ClienteModel> crearCliente({
+    required String razonSocial,
+    required String rfc,
+    required int diasCredito,
+    String? estado,
+  }) async {
+    final payload = {
+      'razonSocial': razonSocial.trim(),
+      'rfc': rfc.toUpperCase().trim(),
+      'diasCredito': diasCredito,
+      'estado': estado ?? 'activo',
+    };
+
+    if (hasToken && !_modoAvion) {
+      try {
+        final res = await post('/api/clientes', body: payload);
+        if (res.statusCode == 201) {
+          final data = jsonDecode(res.body);
+          return ClienteModel.fromJson(data['data']['cliente']);
+        } else {
+          final err = jsonDecode(res.body);
+          throw Exception(err['message'] ?? 'Error al guardar cliente');
+        }
+      } catch (e) {
+        if (!e.toString().contains('SocketException')) rethrow;
+      }
+    }
+
+    final nuevo = ClienteModel(
+      id: 'cli_${DateTime.now().millisecondsSinceEpoch}',
+      razonSocial: razonSocial.trim(),
+      rfc: rfc.toUpperCase().trim(),
+      diasCredito: diasCredito,
+      estado: estado ?? 'activo',
+    );
+    _demoClientes.insert(0, nuevo.toJson());
+    return nuevo;
+  }
+
+  // --- Tarifas ---
+
+  Future<List<TarifaModel>> fetchTarifas({String? query}) async {
+    if (hasToken && !_modoAvion) {
+      try {
+        final uri = Uri(path: '/api/tarifas', queryParameters: {
+          if (query != null && query.isNotEmpty) 'q': query,
+        }).toString();
+        final res = await get(uri);
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final list = (data['data']['tarifas'] as List? ?? [])
+              .map((e) => TarifaModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          return list;
+        }
+      } catch (_) {}
+    }
+
+    var list = _demoTarifas.map((e) => TarifaModel.fromJson(e)).toList();
+    if (query != null && query.isNotEmpty) {
+      final q = query.toLowerCase();
+      list = list.where((t) =>
+          t.ruta.toLowerCase().contains(q) ||
+          t.tipoCarga.toLowerCase().contains(q)).toList();
+    }
+    return list;
+  }
+
+  Future<TarifaModel> crearTarifa({
+    required String ruta,
+    required String tipoCarga,
+    required double montoBase,
+    double? capacidadTon,
+    String? estado,
+  }) async {
+    final payload = {
+      'ruta': ruta.trim(),
+      'tipoCarga': tipoCarga.trim(),
+      'montoBase': montoBase,
+      'capacidadTon': capacidadTon ?? 25.0,
+      'estado': estado ?? 'activa',
+    };
+
+    if (hasToken && !_modoAvion) {
+      try {
+        final res = await post('/api/tarifas', body: payload);
+        if (res.statusCode == 201) {
+          final data = jsonDecode(res.body);
+          return TarifaModel.fromJson(data['data']['tarifa']);
+        } else {
+          final err = jsonDecode(res.body);
+          throw Exception(err['message'] ?? 'Error al guardar tarifa');
+        }
+      } catch (e) {
+        if (!e.toString().contains('SocketException')) rethrow;
+      }
+    }
+
+    final nuevo = TarifaModel(
+      id: 'tar_${DateTime.now().millisecondsSinceEpoch}',
+      ruta: ruta.trim(),
+      tipoCarga: tipoCarga.trim(),
+      capacidadTon: capacidadTon ?? 25.0,
+      montoBase: montoBase,
+      estado: estado ?? 'activa',
+    );
+    _demoTarifas.insert(0, nuevo.toJson());
+    return nuevo;
   }
 
   /// Verifica si la respuesta indica token expirado (401)
