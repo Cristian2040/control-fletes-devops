@@ -46,12 +46,18 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             children: [
-              // Barra de estado con indicador ONLINE
+              // Barra de estado con configuración de IP de servidor e indicador ONLINE
               const SizedBox(height: 12),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  OnlineIndicator(isOnline: true),
+                  IconButton(
+                    key: const Key('btn_config_servidor'),
+                    icon: const Icon(Icons.settings_ethernet, color: AppColors.textSecondary, size: 22),
+                    tooltip: 'Configurar IP del Servidor Backend',
+                    onPressed: _abrirConfiguracionServidor,
+                  ),
+                  const OnlineIndicator(isOnline: true),
                 ],
               ),
 
@@ -329,5 +335,163 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _abrirConfiguracionServidor() async {
+    final ipController = TextEditingController(text: ApiClient().baseUrl);
+    bool probando = false;
+    String? estadoPrueba;
+    bool pruebaExitosa = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppColors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.wifi, color: AppColors.primary, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Servidor Backend (API)',
+                    style: TextStyle(color: AppColors.textPrimary, fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Dirección IP de tu laptop para pruebas en red local:',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: ipController,
+                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: AppColors.background,
+                        hintText: 'http://172.16.33.178:3000',
+                        hintStyle: const TextStyle(color: AppColors.textMuted),
+                        prefixIcon: const Icon(Icons.link, color: AppColors.textSecondary),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Opciones rápidas según tu conexión:',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _buildPresetChip('http://172.16.33.178:3000', 'Red Local / Wi-Fi', ipController, setDialogState),
+                        _buildPresetChip('http://192.168.137.1:3000', 'Hotspot Laptop', ipController, setDialogState),
+                        _buildPresetChip('http://127.0.0.1:3000', 'USB (adb reverse)', ipController, setDialogState),
+                        _buildPresetChip('http://10.0.2.2:3000', 'Emulador', ipController, setDialogState),
+                      ],
+                    ),
+                    if (estadoPrueba != null) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: (pruebaExitosa ? AppColors.success : AppColors.error).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: pruebaExitosa ? AppColors.success : AppColors.error),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              pruebaExitosa ? Icons.check_circle : Icons.error_outline,
+                              color: pruebaExitosa ? AppColors.success : AppColors.error,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                estadoPrueba!,
+                                style: TextStyle(
+                                  color: pruebaExitosa ? AppColors.success : AppColors.error,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: probando
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            probando = true;
+                            estadoPrueba = 'Probando conexión con el servidor...';
+                            pruebaExitosa = false;
+                          });
+                          final ok = await ApiClient().checkHealth(ipController.text.trim());
+                          setDialogState(() {
+                            probando = false;
+                            pruebaExitosa = ok;
+                            estadoPrueba = ok
+                                ? '¡Conexión exitosa con Tracto Trak API (200 OK)!'
+                                : 'No se pudo conectar. Verifica que npm run dev esté corriendo.';
+                          });
+                        },
+                  child: probando
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Probar Conexión', style: TextStyle(color: AppColors.accent)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  onPressed: () async {
+                    final nuevaUrl = ipController.text.trim();
+                    if (nuevaUrl.isNotEmpty) {
+                      await ApiClient().updateBaseUrl(nuevaUrl);
+                      if (context.mounted) {
+                        Navigator.of(dialogCtx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Servidor configurado: $nuevaUrl'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Guardar y Usar', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPresetChip(String url, String label, TextEditingController controller, StateSetter setDialogState) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      backgroundColor: AppColors.surfaceVariant,
+      onPressed: () {
+        setDialogState(() {
+          controller.text = url;
+        });
+      },
+    );
   }
 }

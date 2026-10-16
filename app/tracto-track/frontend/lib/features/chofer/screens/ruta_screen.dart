@@ -25,16 +25,50 @@ class _RutaScreenState extends State<RutaScreen> {
   final ApiClient _apiClient = ApiClient();
   List<GastoModel> _gastosRecientes = [];
   bool _cargando = true;
+  bool _sincronizando = false;
 
   @override
   void initState() {
     super.initState();
+    _apiClient.pendientesNotifier.addListener(_onPendientesUpdate);
     _cargarDatos();
   }
 
-  Future<void> _cargarDatos() async {
+  @override
+  void dispose() {
+    _apiClient.pendientesNotifier.removeListener(_onPendientesUpdate);
+    super.dispose();
+  }
+
+  void _onPendientesUpdate() {
+    if (mounted) {
+      _cargarDatos(mostrarMensajeSync: false);
+    }
+  }
+
+  /// Carga comprobantes y sincroniza en segundo plano los pendientes si hay red (US-05 / RF-04)
+  Future<void> _cargarDatos({bool mostrarMensajeSync = false}) async {
     setState(() => _cargando = true);
     try {
+      // Si estamos en línea, sincronizar automáticamente los gastos pendientes (US-05)
+      if (_apiClient.isOnline) {
+        final pendientes = await _apiClient.localRepo.obtenerPendientes();
+        if (pendientes.isNotEmpty) {
+          final syncRes = await _apiClient.sincronizarPendientes();
+          if (mounted && syncRes.totalSincronizados > 0 && mostrarMensajeSync) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '${syncRes.totalSincronizados} comprobante(s) offline sincronizado(s) con la base de datos (US-05)',
+                ),
+                backgroundColor: AppColors.success,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+
       final res = await _apiClient.obtenerGastos();
       final list = (res['gastos'] as List? ?? [])
           .map((e) => GastoModel.fromJson(e as Map<String, dynamic>))
@@ -45,6 +79,53 @@ class _RutaScreenState extends State<RutaScreen> {
       });
     } catch (_) {
       setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _sincronizarAhora() async {
+    if (_sincronizando) return;
+    setState(() => _sincronizando = true);
+    try {
+      final syncRes = await _apiClient.sincronizarPendientes(forzar: true);
+      if (mounted) {
+        setState(() => _sincronizando = false);
+        if (syncRes.totalSincronizados > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${syncRes.totalSincronizados} comprobante(s) sincronizado(s) exitosamente (US-05)'),
+              backgroundColor: AppColors.success,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else if (syncRes.totalErrores > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al sincronizar: ${syncRes.errores.firstOrNull ?? "Fallo de conexión"}'),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else if (syncRes.totalPendientes == 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Todos los comprobantes ya se encuentran sincronizados'),
+              backgroundColor: AppColors.primary,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        await _cargarDatos();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sincronizando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al sincronizar: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
@@ -101,22 +182,22 @@ class _RutaScreenState extends State<RutaScreen> {
                 child: InkWell(
                   key: const Key('btn_toggle_online'),
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () {
+                  onTap: () async {
                     final nuevoModo = !_apiClient.isModoAvion;
                     _apiClient.setModoAvion(nuevoModo);
                     setState(() {});
-                    _cargarDatos();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          nuevoModo
-                              ? 'Modo Fuera de Línea / Avión activado (RF-03)'
-                              : 'Conexión restaurada (ONLINE)',
+                    if (!nuevoModo) {
+                      await _sincronizarAhora();
+                    } else {
+                      await _cargarDatos();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Modo Fuera de Línea / Avión activado (RF-03)'),
+                          backgroundColor: AppColors.warning,
+                          duration: Duration(seconds: 2),
                         ),
-                        backgroundColor: nuevoModo ? AppColors.warning : AppColors.online,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
+                      );
+                    }
                   },
                   child: OnlineIndicator(isOnline: _apiClient.isOnline),
                 ),
@@ -126,7 +207,7 @@ class _RutaScreenState extends State<RutaScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _cargarDatos,
+        onRefresh: () => _cargarDatos(mostrarMensajeSync: true),
         color: AppTheme.primaryBlue,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -171,24 +252,60 @@ class _RutaScreenState extends State<RutaScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.warning.withOpacity(0.4)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.cloud_off, color: AppColors.warning, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '${pendientes.length} comprobante${pendientes.length > 1 ? "s" : ""} pendiente${pendientes.length > 1 ? "s" : ""} de sincronización guardado${pendientes.length > 1 ? "s" : ""} localmente (US-04)',
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+          Row(
+            children: [
+              const Icon(Icons.cloud_off, color: AppColors.warning, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${pendientes.length} comprobante${pendientes.length > 1 ? "s" : ""} pendiente${pendientes.length > 1 ? "s" : ""} de sincronización guardado${pendientes.length > 1 ? "s" : ""} localmente (US-04)',
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              const StatusBadge(
+                label: 'OFFLINE',
+                color: AppColors.warning,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 38,
+            child: ElevatedButton.icon(
+              key: const Key('btn_sincronizar_ahora'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
+              onPressed: _sincronizando ? null : _sincronizarAhora,
+              icon: _sincronizando
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(Icons.sync, size: 16),
+              label: Text(
+                _sincronizando ? 'Sincronizando...' : 'Sincronizar ahora (US-05)',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               ),
             ),
-          ),
-          const SizedBox(width: 6),
-          const StatusBadge(
-            label: 'OFFLINE',
-            color: AppColors.warning,
           ),
         ],
       ),

@@ -24,16 +24,43 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
   double _totalImporte = 0.0;
   int _totalComprobantes = 0;
   bool _cargando = true;
+  bool _sincronizando = false;
 
   @override
   void initState() {
     super.initState();
+    _apiClient.pendientesNotifier.addListener(_onPendientesUpdate);
     _cargarGastos();
   }
 
-  Future<void> _cargarGastos() async {
+  @override
+  void dispose() {
+    _apiClient.pendientesNotifier.removeListener(_onPendientesUpdate);
+    super.dispose();
+  }
+
+  void _onPendientesUpdate() {
+    if (mounted) {
+      _cargarGastos(sincronizar: false);
+    }
+  }
+
+  Future<void> _cargarGastos({bool sincronizar = false, bool mostrarMensaje = false}) async {
     setState(() => _cargando = true);
     try {
+      if (sincronizar && _apiClient.isOnline) {
+        final resSync = await _apiClient.sincronizarPendientes();
+        if (mounted && resSync.totalSincronizados > 0 && mostrarMensaje) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${resSync.totalSincronizados} comprobante(s) sincronizado(s) exitosamente (US-05)'),
+              backgroundColor: AppColors.success,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+
       final res = await _apiClient.obtenerGastos();
       final list = (res['gastos'] as List? ?? [])
           .map((e) => GastoModel.fromJson(e as Map<String, dynamic>))
@@ -49,6 +76,53 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
       });
     } catch (_) {
       setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _sincronizarAhora() async {
+    if (_sincronizando) return;
+    setState(() => _sincronizando = true);
+    try {
+      final resSync = await _apiClient.sincronizarPendientes(forzar: true);
+      if (mounted) {
+        setState(() => _sincronizando = false);
+        if (resSync.totalSincronizados > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${resSync.totalSincronizados} comprobante(s) sincronizado(s) con la base de datos (US-05)'),
+              backgroundColor: AppColors.success,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else if (resSync.totalErrores > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al sincronizar: ${resSync.errores.firstOrNull ?? "Fallo de conexión"}'),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Todos los comprobantes ya se encuentran sincronizados'),
+              backgroundColor: AppColors.primary,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        await _cargarGastos(sincronizar: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _sincronizando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de sincronización: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
@@ -85,12 +159,29 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
+        actions: [
+          IconButton(
+            key: const Key('btn_refresh_mis_gastos'),
+            icon: _sincronizando
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync, color: AppColors.online),
+            tooltip: 'Sincronizar comprobantes',
+            onPressed: _sincronizando ? null : _sincronizarAhora,
+          ),
+        ],
       ),
       body: RefreshIndicator(
-        onRefresh: _cargarGastos,
+        onRefresh: () => _cargarGastos(sincronizar: true, mostrarMensaje: true),
         color: AppTheme.primaryBlue,
         child: Column(
           children: [
+            // Alerta de pendientes si hay registros offline
+            _buildBannerPendientes(),
+
             // Barra de Total Acumulado
             _buildBarraTotal(),
 
@@ -128,6 +219,54 @@ class _MisGastosScreenState extends State<MisGastosScreen> {
         ),
       ),
       bottomNavigationBar: const ChoferBottomNavBar(currentIndex: 1),
+    );
+  }
+
+  Widget _buildBannerPendientes() {
+    if (_pendientesCount == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.warning.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off, color: AppColors.warning, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '$_pendientesCount ticket${_pendientesCount > 1 ? "s" : ""} pendiente${_pendientesCount > 1 ? "s" : ""} de sincronización',
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton.icon(
+            key: const Key('btn_sync_pendientes_banner'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              elevation: 0,
+            ),
+            onPressed: _sincronizando ? null : _sincronizarAhora,
+            icon: _sincronizando
+                ? const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync, size: 14),
+            label: const Text('Sincronizar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 

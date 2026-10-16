@@ -21,7 +21,7 @@ const app = express();
 
 // --- Middlewares globales ---
 app.use(helmet());                         // Cabeceras de seguridad
-app.use(cors({ origin: config.corsOrigins }));  // CORS restringido a orígenes permitidos (CORS_ORIGIN)
+app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '10mb' }));  // Parseo de JSON (hasta 10 MB para imágenes base64)
 app.use(express.urlencoded({ extended: true }));
 

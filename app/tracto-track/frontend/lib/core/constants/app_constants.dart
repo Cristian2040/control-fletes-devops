@@ -13,8 +13,11 @@ class AppConstants {
   /// Versión
   static const String appVersion = '1.0.0';
 
-  /// URL base de la API (se sobreescribe en desarrollo con la IP local)
-  static const String apiBaseUrl = 'http://10.0.2.2:3000';
+  /// URL base de la API predeterminada.
+  /// - Dispositivo físico en misma red local: http://172.16.33.178:3000 (o Hotspot http://192.168.137.1:3000)
+  /// - Dispositivo físico con cable USB (adb reverse): http://127.0.0.1:3000
+  /// - Emulador Android Studio: http://10.0.2.2:3000
+  static const String apiBaseUrl = 'http://172.16.33.178:3000';
 
   /// Timeout de conexión HTTP (milisegundos)
   static const int httpTimeout = 10000;
