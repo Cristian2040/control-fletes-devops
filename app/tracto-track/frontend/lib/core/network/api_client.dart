@@ -14,6 +14,7 @@ import '../constants/app_constants.dart';
 
 import '../../data/models/gasto_model.dart';
 import '../../data/models/catalogo_models.dart';
+import '../../data/models/viaje_model.dart';
 import '../../data/repositories/local_gasto_repository.dart';
 
 class ApiClient {
@@ -993,6 +994,176 @@ class ApiClient {
     return nuevo;
   }
 
+  // =========================================================================
+  // TABLERO Y VIAJES / DESPACHOS (Sprint 7 — A-02, A-03, A-04, RF-05, US-07)
+  // =========================================================================
+
+  final List<Map<String, dynamic>> _demoViajes = [
+    {
+      'id': 'viaje_1',
+      'folio': 'FL-101',
+      'cliente': 'CEMEX S.A. de C.V.',
+      'origen': 'Monterrey',
+      'destino': 'CDMX',
+      'ruta': 'Monterrey → CDMX',
+      'camion': 'Kenworth T680 (NLZ-8823-A)',
+      'placasCamion': 'NLZ-8823-A',
+      'chofer': 'Jorge González',
+      'tarifaPactada': 18500.0,
+      'anticipoEntregado': 5000.0,
+      'estado': 'en_ruta',
+    },
+    {
+      'id': 'viaje_2',
+      'folio': 'FL-102',
+      'cliente': 'Gruma Internacional',
+      'origen': 'San Luis Potosí',
+      'destino': 'GDL',
+      'ruta': 'San Luis Potosí → GDL',
+      'camion': 'Freightliner Cascadia (SPF-4412-B)',
+      'placasCamion': 'SPF-4412-B',
+      'chofer': 'Raúl Mendoza',
+      'tarifaPactada': 14200.0,
+      'anticipoEntregado': 4000.0,
+      'estado': 'en_ruta',
+    },
+  ];
+
+  /// Obtiene los indicadores KPI del Panel de Control (A-02, RNF-01).
+  Future<TableroResumenModel> fetchTableroResumen() async {
+    if (hasToken && !_modoAvion) {
+      try {
+        final res = await get('/api/tablero/resumen');
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return TableroResumenModel.fromJson(
+            data['data'] as Map<String, dynamic>? ?? {},
+          );
+        }
+      } catch (_) {}
+    }
+
+    final viajesActivos = _demoViajes
+        .where((v) => (v['estado'] as String? ?? 'en_ruta') == 'en_ruta')
+        .length;
+    final unidadesFlota = _demoCamiones.length;
+    final gastos = await _localRepo.obtenerTodos();
+    final ticketsPorAuditar = gastos.isEmpty ? 3 : gastos.length;
+
+    return TableroResumenModel(
+      empresa: 'Transportes Flores S.A.',
+      baseOperativa: 'Base Monterrey',
+      viajesActivos: viajesActivos,
+      ticketsPorAuditar: ticketsPorAuditar,
+      unidadesFlota: unidadesFlota,
+    );
+  }
+
+  /// Lista los despachos / órdenes de viaje activos (A-03).
+  Future<List<ViajeModel>> fetchViajes({String? query, String? estado}) async {
+    if (hasToken && !_modoAvion) {
+      try {
+        final uri = Uri(path: '/api/viajes', queryParameters: {
+          if (query != null && query.isNotEmpty) 'q': query,
+          if (estado != null && estado.isNotEmpty) 'estado': estado,
+        }).toString();
+        final res = await get(uri);
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          final list = (data['data']['viajes'] as List? ?? [])
+              .map((e) => ViajeModel.fromJson(e as Map<String, dynamic>))
+              .toList();
+          return list;
+        }
+      } catch (_) {}
+    }
+
+    var list = _demoViajes.map((e) => ViajeModel.fromJson(e)).toList();
+    if (query != null && query.isNotEmpty) {
+      final q = query.toLowerCase();
+      list = list
+          .where((v) =>
+              v.folio.toLowerCase().contains(q) ||
+              v.cliente.toLowerCase().contains(q) ||
+              v.chofer.toLowerCase().contains(q) ||
+              v.ruta.toLowerCase().contains(q) ||
+              v.camion.toLowerCase().contains(q))
+          .toList();
+    }
+    if (estado != null && estado.isNotEmpty) {
+      list = list
+          .where((v) => v.estado.toLowerCase() == estado.toLowerCase())
+          .toList();
+    }
+    return list;
+  }
+
+  /// Emite una nueva Orden de Viaje (A-04, RF-05, US-07).
+  Future<ViajeModel> crearViaje({
+    required String cliente,
+    required String origen,
+    required String destino,
+    required String camion,
+    required String chofer,
+    required double tarifaPactada,
+    double anticipoEntregado = 0.0,
+  }) async {
+    final payload = {
+      'cliente': cliente.trim(),
+      'origen': origen.trim(),
+      'destino': destino.trim(),
+      'camion': camion.trim(),
+      'chofer': chofer.trim(),
+      'tarifaPactada': tarifaPactada,
+      'anticipoEntregado': anticipoEntregado,
+    };
+
+    if (hasToken && !_modoAvion) {
+      try {
+        final res = await post('/api/viajes', body: payload);
+        if (res.statusCode == 201) {
+          final data = jsonDecode(res.body);
+          return ViajeModel.fromJson(data['data']['viaje']);
+        } else {
+          final err = jsonDecode(res.body);
+          throw Exception(err['message'] ?? 'Error al emitir orden de viaje');
+        }
+      } catch (e) {
+        if (!e.toString().contains('SocketException')) rethrow;
+      }
+    }
+
+    int maxFolio = 100;
+    for (final item in _demoViajes) {
+      final f = (item['folio'] as String? ?? 'FL-100').replaceAll('FL-', '');
+      final n = int.tryParse(f) ?? 100;
+      if (n > maxFolio) maxFolio = n;
+    }
+    final nuevoFolio = 'FL-${(maxFolio + 1).toString().padLeft(3, '0')}';
+
+    final origenLimpio = origen.trim();
+    final destinoLimpio = destino.trim();
+    final matchPlacas = RegExp(r'\(([^)]+)\)').firstMatch(camion);
+    final placas = matchPlacas != null ? matchPlacas.group(1)! : 'NLZ-8823-A';
+
+    final nuevo = ViajeModel(
+      id: 'viaje_${DateTime.now().millisecondsSinceEpoch}',
+      folio: nuevoFolio,
+      cliente: cliente.trim(),
+      origen: origenLimpio,
+      destino: destinoLimpio,
+      ruta: '$origenLimpio → $destinoLimpio',
+      camion: camion.trim(),
+      placasCamion: placas,
+      chofer: chofer.trim(),
+      tarifaPactada: tarifaPactada,
+      anticipoEntregado: anticipoEntregado,
+      estado: 'en_ruta',
+    );
+    _demoViajes.insert(0, nuevo.toJson());
+    return nuevo;
+  }
+
   /// Verifica si la respuesta indica token expirado (401)
   /// y limpia la sesión automáticamente.
   bool handleUnauthorized(http.Response response) {
@@ -1020,5 +1191,3 @@ class SyncResult {
 
   bool get exitoso => totalErrores == 0 && totalSincronizados > 0;
 }
-
-
