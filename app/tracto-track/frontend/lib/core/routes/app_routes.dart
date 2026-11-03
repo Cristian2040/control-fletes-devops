@@ -21,6 +21,9 @@ import '../../features/admin/screens/placeholder_screen.dart';
 import '../../features/mecanica/screens/mecanica_list_screen.dart';
 import '../../features/mecanica/screens/mecanica_form_screen.dart';
 import '../../features/mecanica/screens/mecanica_detalle_screen.dart';
+import '../../features/admin/screens/tablero_screen.dart';
+import '../../features/admin/screens/viajes_screen.dart';
+import '../../features/admin/screens/asignacion_viaje_screen.dart';
 import '../../features/admin/screens/catalogos_screen.dart';
 import '../../features/admin/screens/alta_camion_screen.dart';
 import '../../features/admin/screens/alta_chofer_screen.dart';
@@ -79,22 +82,10 @@ class AppRoutes {
       mecanicaForm: (context) => const MecanicaFormScreen(),
       mecanicaDetalle: (context) => const MecanicaDetalleScreen(),
 
-      // Módulo Administrador — placeholders hasta sus Sprints correspondientes
-      adminHome: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-02',
-            nombre: 'Tablero – Panel de Control',
-            sprint: 7,
-          ),
-      adminViajes: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-03',
-            nombre: 'Módulo de Viajes y Fletes',
-            sprint: 7,
-          ),
-      adminAsignacion: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-04',
-            nombre: 'Asignación de Viaje',
-            sprint: 7,
-          ),
+      // Módulo Administrador — Sprint 6 (Catálogos) y Sprint 7 (Tablero y Viajes)
+      adminHome: (context) => const TableroScreen(),
+      adminViajes: (context) => const ViajesScreen(),
+      adminAsignacion: (context) => const AsignacionViajeScreen(),
       adminCatalogos: (context) => const CatalogosScreen(),
       adminAltaCamion: (context) => const AltaCamionScreen(),
       adminAltaChofer: (context) => const AltaChoferScreen(),
