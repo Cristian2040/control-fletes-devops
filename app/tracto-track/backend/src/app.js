@@ -17,6 +17,7 @@ const authRoutes = require('./routes/auth');
 const gastosRoutes = require('./routes/gastos');
 const mecanicaRoutes = require('./routes/mecanica');
 const catalogosRoutes = require('./routes/catalogos');
+const viajesRoutes = require('./routes/viajes');
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/gastos', gastosRoutes);
 app.use('/api/mecanica', mecanicaRoutes);
 app.use('/api', catalogosRoutes);
+app.use('/api', viajesRoutes);
 
 
 // --- Manejo de errores ---
