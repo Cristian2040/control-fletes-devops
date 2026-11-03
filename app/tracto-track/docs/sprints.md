@@ -190,5 +190,124 @@ Registro de entregas por Sprint, con lo construido, pruebas y decisiones.
   - Backend: 27/27 pruebas Jest pasando (`backend/test/*.test.js`).
   - Frontend: 37/37 pruebas Flutter pasando (`test/sprint1_test.dart`, `test/sprint3_test.dart`, `test/sprint4_test.dart`).
 
+---
+
+## Sprint 5 — Sincronización Automática y Manual Offline-Online (US-05, RF-04)
+
+**Fecha:** Octubre 2026
+
+### Entregables
+
+#### Punto 1: Sincronización Automática al Restaurar Red Celular (US-05)
+- **Monitoreo Reactivo y Periódico en `ApiClient`** (`lib/core/network/api_client.dart`):
+  - `iniciarAutoSincronizacion({Duration intervalo})`: Timer periódico en segundo plano que vigila registros pendientes y dispara la sincronización tan pronto hay conectividad.
+  - Notificadores `ValueNotifier<int> pendientesNotifier` y `ValueNotifier<bool> isOnlineNotifier` para actualización en tiempo real de la interfaz.
+  - Sincronización automática inmediata al alternar de modo avión a online mediante `setModoAvion(false)`.
+
+#### Punto 2: Transmisión y Transición de Estados
+- **Motor de Transmisión `sincronizarPendientes({bool forzar})`**:
+  - Recupera comprobantes con estado `pendiente` desde `LocalGastoRepository`.
+  - Transmite fotos, odómetros, montos e insumos a la API REST `/api/gastos` preservando integridad criptográfica y datos.
+  - Al recibir respuesta 201 de MongoDB, actualiza el estado local a `'sincronizado'`, sustituye el folio temporal `#TT-OFF-######` por el folio definitivo `#TT-######` emitido por el backend, y actualiza los contadores.
+  - Estructura `SyncResult` con conteos detallados de pendientes, sincronizados y errores.
+
+#### Punto 3: Gatillos Manuales en Pantallas del Chofer
+- **Pantalla C-02 `RutaScreen`**:
+  - Banner dinámico con botón "Sincronizar ahora" (`btn_sincronizar_ahora`) visible cuando hay comprobantes pendientes en almacenamiento local.
+  - Recarga automática en tiempo real al concluir la transmisión.
+- **Pantalla C-05 `MisGastosScreen`**:
+  - Banner superior con contador de pendientes y botón "Sincronizar ahora" (`btn_sync_pendientes_banner`).
+  - Botón de refresco manual en la AppBar (`btn_refresh_mis_gastos`) y soporte para gesto pull-to-refresh (`RefreshIndicator`).
+
+### Pruebas
+- Frontend: `frontend/test/sprint5_sync_test.dart` (40/40 tests pasando en toda la suite de Flutter).
+
+---
+
+## Sprint 6 — Panel Móvil de Catálogos (RF-05, A-05 a A-12)
+
+**Fecha:** Octubre 2026
+
+### Entregables
+
+#### Backend
+- **Modelo Mongoose `Tarifa`** (`src/models/Tarifa.js`):
+  - Campos: `ruta`, `tipoCarga`, `capacidadTon`, `montoBase`, `estado`, `fechaCreacion`.
+  - Registrado en `src/models/index.js`.
+- **Controlador `catalogoController.js`** (`src/controllers/catalogoController.js`):
+  - CRUD completo para Camiones, Choferes, Clientes y Tarifas.
+  - Semillero automático con datos maestros iniciales (`asegurarDatosSemilla()`).
+  - Filtros de búsqueda por texto (`q`) y estado (`estado`).
+- **Rutas de Catálogos** (`src/routes/catalogos.js`):
+  - Endpoints montados en `/api`: `/api/camiones`, `/api/choferes`, `/api/clientes`, `/api/tarifas`.
+  - Protegidas con token JWT mediante middleware `autenticarToken`.
+- **Pruebas de Integración**: `backend/test/catalogos.test.js` con 9 escenarios para verificar protección JWT, creación y filtrado de las 4 entidades maestras (36/36 tests pasando).
+
+#### Frontend
+- **Modelos de Catálogos** (`lib/data/models/catalogo_models.dart`):
+  - `CamionModel`: placas, marca, modelo, año, capacidad Ton, odómetro, estado (`disponible`, `en_ruta`, `en_taller`).
+  - `ChoferModel`: nombre, licencia federal, teléfono, empresa, estado (`disponible`, `en_ruta`, `inactivo`).
+  - `ClienteModel`: razón social, RFC, días de crédito, estado (`activo`, `inactivo`).
+  - `TarifaModel`: ruta/tramo, tipo de carga, capacidad Ton, monto base MXN, estado (`activa`, `inactiva`).
+- **Métodos en `ApiClient`** (`lib/core/network/api_client.dart`):
+  - `fetchCamiones`, `crearCamion`, `fetchChoferes`, `crearChofer`, `fetchClientes`, `crearCliente`, `fetchTarifas`, `crearTarifa`.
+  - Respaldo de datos semilla en memoria (`_demoCamiones`, `_demoChoferes`, `_demoClientes`, `_demoTarifas`) para operación fluida en modo demo / offline.
+- **Navegación del Administrador**:
+  - `AdminBottomNavBar` (`lib/features/admin/widgets/admin_bottom_nav_bar.dart`): Barra inferior de 6 módulos (Tablero A-02, Viajes A-03, Catálogos A-05, Auditoría A-13, Liquidación A-15, Perfil A-17).
+- **Pantalla Central `CatalogosScreen`** (`lib/features/admin/screens/catalogos_screen.dart`):
+  - Implementa A-05 (Camiones), A-06 (Choferes), A-07 (Clientes) y A-08 (Tarifas).
+  - Pestañas con `TabController` y recarga reactiva de datos.
+  - Buscador reactivo superior (`input_buscar_catalogo`) con hint dinámico por entidad.
+  - Tarjetas detalladas con insignias semánticas (`StatusBadge`).
+  - Botón superior `+ Alta` (`btn_alta_catalogo`) que navega directamente al formulario de alta de la pestaña activa.
+  - Soporte para pull-to-refresh (`RefreshIndicator`).
+- **Formularios de Alta (A-09 a A-12)**:
+  - `AltaCamionScreen` (A-09, `lib/features/admin/screens/alta_camion_screen.dart`): Placas, marca, modelo, año y capacidad Ton.
+  - `AltaChoferScreen` (A-10, `lib/features/admin/screens/alta_chofer_screen.dart`): Nombre completo, licencia federal y teléfono celular.
+  - `AltaClienteScreen` (A-11, `lib/features/admin/screens/alta_cliente_screen.dart`): Razón social, RFC y días de crédito.
+  - `AltaTarifaScreen` (A-12, `lib/features/admin/screens/alta_tarifa_screen.dart`): Ruta pactada, tipo de carga, capacidad y monto base en MXN.
+- **Rutas en `AppRoutes`** (`lib/core/routes/app_routes.dart`):
+  - Reemplazo de placeholders por las pantallas definitivas de A-05 a A-12.
+
+### Pruebas
+- Backend: `backend/test/catalogos.test.js` (36/36 tests pasando).
+- Frontend: `frontend/test/sprint6_catalogos_test.dart` (50/50 tests pasando en toda la suite de Flutter).
 
 
+
+
+---
+
+## Sprint 7 — Tablero de Control, Módulo de Viajes y Asignación de Viaje (A-02, A-03, A-04 — RNF-01, RF-05, US-07)
+
+**Fecha:** Noviembre 2026
+
+### Entregables
+
+#### Backend
+- **Modelo Mongoose `Viaje`** (`src/models/Viaje.js`):
+  - Campos: `folio` (formato oficial `FL-###`, ej. `FL-101`), `cliente`, `origen`, `destino`, `ruta`, `camion`, `placasCamion`, `chofer`, `tarifaPactada`, `anticipoEntregado`, `estado`, `fechaSalida`.
+  - Registrado en `src/models/index.js`.
+- **Controlador `viajeController.js`** (`src/controllers/viajeController.js`):
+  - `obtenerTableroResumen` (`GET /api/tablero/resumen`): Calcula los indicadores KPI (`viajesActivos`, `ticketsPorAuditar`, `unidadesFlota`) para el Panel de Control (A-02, RNF-01).
+  - `listarViajes` (`GET /api/viajes`): Lista despachos activos y permite filtrado por texto (`q`) y `estado`.
+  - `crearViaje` (`POST /api/viajes`): Genera folios consecutivos `FL-###` y emite órdenes de viaje con tarifa pactada y anticipo entregado (A-04, US-07).
+- **Rutas de Viajes y Tablero** (`src/routes/viajes.js`):
+  - Montadas en `/api` y protegidas mediante `autenticarToken`.
+- **Pruebas de Integración**: `backend/test/viajes.test.js` (56/56 pruebas Jest pasando en las 6 suites).
+
+#### Frontend
+- **Modelos de Dominio** (`lib/data/models/viaje_model.dart`):
+  - `TableroResumenModel` y `ViajeModel`.
+- **Métodos en `ApiClient`** (`lib/core/network/api_client.dart`):
+  - `fetchTableroResumen()`, `fetchViajes()` y `crearViaje()` con respaldo en memoria (`_demoViajes`).
+- **Pantallas del Administrador (A-02, A-03, A-04)**:
+  - `TableroScreen` (A-02, `lib/features/admin/screens/tablero_screen.dart`): Encabezado institucional (`Transportes Flores S.A.`, `Base Monterrey`), 3 tarjetas KPI (`Viajes Activos`, `Tickets Auditoría`, `Unidades Flota`) y tarjetas de acceso directo a módulos (`Asignar Nuevo Viaje (RF-05)`, `Auditoría en Ruta (RF-06)`, `Motor de Liquidaciones (US-13)`).
+  - `ViajesScreen` (A-03, `lib/features/admin/screens/viajes_screen.dart`): Listado de despachos activos con folio `FL-###`, cliente, insignia `EN RUTA`, ruta (`Origen → Destino`), chofer, tractocamión, anticipo y tarifa pactada en MXN, además del botón `+ Asignar`.
+  - `AsignacionViajeScreen` (A-04, `lib/features/admin/screens/asignacion_viaje_screen.dart`): Formulario de despacho de Flete y Anticipo con botón `Emitir Orden de Viaje (US-07)`.
+- **Rutas en `AppRoutes`** (`lib/core/routes/app_routes.dart`):
+  - Vinculación de `adminHome` (A-02), `adminViajes` (A-03) y `adminAsignacion` (A-04).
+
+### Pruebas
+- Backend: `backend/test/viajes.test.js` (56/56 tests pasando).
+- Frontend: `frontend/test/sprint7_viajes_test.dart` (54/54 tests pasando en toda la suite de Flutter).

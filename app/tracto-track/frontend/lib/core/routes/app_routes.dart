@@ -21,6 +21,14 @@ import '../../features/admin/screens/placeholder_screen.dart';
 import '../../features/mecanica/screens/mecanica_list_screen.dart';
 import '../../features/mecanica/screens/mecanica_form_screen.dart';
 import '../../features/mecanica/screens/mecanica_detalle_screen.dart';
+import '../../features/admin/screens/tablero_screen.dart';
+import '../../features/admin/screens/viajes_screen.dart';
+import '../../features/admin/screens/asignacion_viaje_screen.dart';
+import '../../features/admin/screens/catalogos_screen.dart';
+import '../../features/admin/screens/alta_camion_screen.dart';
+import '../../features/admin/screens/alta_chofer_screen.dart';
+import '../../features/admin/screens/alta_cliente_screen.dart';
+import '../../features/admin/screens/alta_tarifa_screen.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -74,47 +82,15 @@ class AppRoutes {
       mecanicaForm: (context) => const MecanicaFormScreen(),
       mecanicaDetalle: (context) => const MecanicaDetalleScreen(),
 
-      // Módulo Administrador — placeholders hasta sus Sprints correspondientes
-      adminHome: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-02',
-            nombre: 'Tablero – Panel de Control',
-            sprint: 7,
-          ),
-      adminViajes: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-03',
-            nombre: 'Módulo de Viajes y Fletes',
-            sprint: 7,
-          ),
-      adminAsignacion: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-04',
-            nombre: 'Asignación de Viaje',
-            sprint: 7,
-          ),
-      adminCatalogos: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-05',
-            nombre: 'Catálogos Operativos',
-            sprint: 6,
-          ),
-      adminAltaCamion: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-09',
-            nombre: 'Alta en Catálogo – Camiones',
-            sprint: 6,
-          ),
-      adminAltaChofer: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-10',
-            nombre: 'Alta en Catálogo – Choferes',
-            sprint: 6,
-          ),
-      adminAltaCliente: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-11',
-            nombre: 'Alta en Catálogo – Clientes',
-            sprint: 6,
-          ),
-      adminAltaTarifa: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-12',
-            nombre: 'Alta en Catálogo – Tarifas',
-            sprint: 6,
-          ),
+      // Módulo Administrador — Sprint 6 (Catálogos) y Sprint 7 (Tablero y Viajes)
+      adminHome: (context) => const TableroScreen(),
+      adminViajes: (context) => const ViajesScreen(),
+      adminAsignacion: (context) => const AsignacionViajeScreen(),
+      adminCatalogos: (context) => const CatalogosScreen(),
+      adminAltaCamion: (context) => const AltaCamionScreen(),
+      adminAltaChofer: (context) => const AltaChoferScreen(),
+      adminAltaCliente: (context) => const AltaClienteScreen(),
+      adminAltaTarifa: (context) => const AltaTarifaScreen(),
       adminAuditoria: (context) => const AdminPlaceholderScreen(
             codigo: 'A-13',
             nombre: 'Auditoría en Ruta',

@@ -21,6 +21,11 @@ const gastoSchema = new mongoose.Schema({
     trim: true,
     match: [/^#TT-\d{6}$/, 'El folio debe tener el formato #TT-######'],
   },
+  folioOffline: {
+    type: String,
+    default: null,
+    trim: true,
+  },
   tipo: {
     type: String,
     required: [true, 'El tipo de gasto es obligatorio'],

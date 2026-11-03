@@ -23,7 +23,7 @@ function normalizarTipoGasto(tipo) {
  * Genera el siguiente folio en formato #TT-###### (Supuesto S-01)
  */
 async function generarSiguienteFolio() {
-  const ultimoGasto = await Gasto.findOne({}, {}, { sort: { createdAt: -1 } });
+  const ultimoGasto = await Gasto.findOne({ folio: /^#TT-\d{6}$/ }).sort({ folio: -1 });
   let numero = 1;
   if (ultimoGasto && ultimoGasto.folio) {
     const match = ultimoGasto.folio.match(/#TT-(\d+)/);
@@ -49,6 +49,7 @@ exports.registrarGasto = async (req, res, next) => {
       fotografiaBase64,
       fotografia,
       placasCamion,
+      folioOffline,
     } = req.body;
 
     // 1. Validar usando el patrón Strategy (P3)
@@ -78,30 +79,61 @@ exports.registrarGasto = async (req, res, next) => {
       choferId = choferDoc._id;
     }
 
-    // 3. Generar folio secuencial
-    const folio = await generarSiguienteFolio();
+    // 3. Verificación de Idempotencia: evitar duplicados si ya fue sincronizado previamente
+    if (folioOffline) {
+      const gastoExistente = await Gasto.findOne({
+        usuario: usuarioId,
+        folioOffline: String(folioOffline).trim(),
+      });
+      if (gastoExistente) {
+        return res.status(200).json({
+          status: 'success',
+          message: 'Gasto ya sincronizado previamente',
+          data: {
+            gasto: gastoExistente,
+          },
+        });
+      }
+    }
 
     // 4. Determinar fotografía final
     const fotoFinal = fotografiaUrl || (fotografiaBase64 ? 'data:image/jpeg;base64,...' : (fotografia || ''));
 
-    // 5. Crear registro de gasto
+    // 5. Crear registro de gasto con reintento automático ante concurrencia de folios
     const tipoNormalizado = normalizarTipoGasto(tipo);
-    const nuevoGasto = await Gasto.create({
-      folio,
-      tipo: tipoNormalizado,
-      monto: Number(monto),
-      odometro: odometro !== undefined && odometro !== null && odometro !== '' ? Number(odometro) : null,
-      proveedor: String(proveedor).trim(),
-      fotografiaUrl: fotoFinal,
-      fotografiaBase64: fotografiaBase64 || '',
-      compresionOptimizada: true,
-      chofer: choferId,
-      usuario: usuarioId,
-      placasCamion: placasCamion || 'NLZ-8823-A',
-      estadoSincronizacion: 'sincronizado',
-      estadoAuditoria: 'pendiente',
-      fecha: new Date(),
-    });
+    let nuevoGasto;
+    let intentos = 0;
+
+    while (intentos < 5) {
+      try {
+        const folio = await generarSiguienteFolio();
+        nuevoGasto = await Gasto.create({
+          folio,
+          folioOffline: folioOffline ? String(folioOffline).trim() : null,
+          tipo: tipoNormalizado,
+          monto: Number(monto),
+          odometro: odometro !== undefined && odometro !== null && odometro !== '' ? Number(odometro) : null,
+          proveedor: String(proveedor).trim(),
+          fotografiaUrl: fotoFinal,
+          fotografiaBase64: fotografiaBase64 || '',
+          compresionOptimizada: true,
+          chofer: choferId,
+          usuario: usuarioId,
+          placasCamion: placasCamion || 'NLZ-8823-A',
+          estadoSincronizacion: 'sincronizado',
+          estadoAuditoria: 'pendiente',
+          fecha: new Date(),
+        });
+        break; // Éxito
+      } catch (err) {
+        if (err.code === 11000 && err.keyPattern && err.keyPattern.folio && intentos < 4) {
+          intentos++;
+          await new Promise((resolve) => setTimeout(resolve, 60 * intentos));
+          continue;
+        }
+        throw err;
+      }
+    }
 
     return res.status(201).json({
       status: 'success',

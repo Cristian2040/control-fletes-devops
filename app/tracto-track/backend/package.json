@@ -10,13 +10,7 @@
     "test:watch": "jest --watch --forceExit --detectOpenHandles",
     "test:coverage": "jest --coverage --forceExit --detectOpenHandles"
   },
-  "keywords": [
-    "autotransporte",
-    "fletes",
-    "gastos",
-    "liquidaciones",
-    "spf"
-  ],
+  "keywords": ["autotransporte", "fletes", "gastos", "liquidaciones", "spf"],
   "author": "Equipo Tracto Trak",
   "license": "ISC",
   "dependencies": {
