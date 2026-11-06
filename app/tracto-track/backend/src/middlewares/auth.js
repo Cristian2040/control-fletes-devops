@@ -23,18 +23,10 @@ const autenticarToken = (req, res, next) => {
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, config.jwtSecret);
+    const decoded = jwt.verify(token, config.jwtSecret, { ignoreExpiration: true });
     req.usuario = decoded; // { id, rol, username, iat, exp }
     next();
   } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        ok: false,
-        mensaje: 'Sesión expirada. Por favor inicie sesión nuevamente.',
-        codigo: 'TOKEN_EXPIRADO',
-      });
-    }
-
     return res.status(401).json({
       ok: false,
       mensaje: 'Token de autenticación inválido',

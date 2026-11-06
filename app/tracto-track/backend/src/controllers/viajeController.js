@@ -57,21 +57,20 @@ if (process.env.NODE_ENV !== 'test') {
  * Genera el siguiente folio consecutivo con formato FL-### (mínimo 3 dígitos, iniciando en FL-101).
  */
 async function generarSiguienteFolioViaje() {
-  const ultimo = await Viaje.findOne(
-    { folio: /^FL-\d+$/ },
-    { folio: 1 }
-  ).sort({ folio: -1, createdAt: -1 });
+  const existentes = await Viaje.find({ folio: /^FL-\d+$/ }, { folio: 1 }).lean();
 
-  let siguienteNum = 101;
-  if (ultimo && ultimo.folio) {
-    const partes = ultimo.folio.split('-');
-    const num = parseInt(partes[1], 10);
-    if (!Number.isNaN(num)) {
-      siguienteNum = Math.max(101, num + 1);
+  let maxNum = 100;
+  for (const doc of existentes) {
+    if (doc.folio) {
+      const partes = doc.folio.split('-');
+      const num = parseInt(partes[1], 10);
+      if (!Number.isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
     }
   }
 
-  return `FL-${String(siguienteNum).padStart(3, '0')}`;
+  return `FL-${String(maxNum + 1).padStart(3, '0')}`;
 }
 
 /**
@@ -200,27 +199,38 @@ exports.crearViaje = async (req, res, next) => {
       placasExtraidas = matchPlacas ? matchPlacas[1] : 'NLZ-8823-A';
     }
 
-    const folio = await generarSiguienteFolioViaje();
     const origenLimpio = String(origen).trim();
     const destinoLimpio = String(destino).trim();
 
-    const nuevoViaje = await Viaje.create({
-      folio,
-      cliente: String(cliente).trim(),
-      origen: origenLimpio,
-      destino: destinoLimpio,
-      ruta: `${origenLimpio} → ${destinoLimpio}`,
-      camion: String(camion).trim(),
-      placasCamion: String(placasExtraidas).trim(),
-      chofer: String(chofer).trim(),
-      tarifaPactada: numTarifa,
-      anticipoEntregado: numAnticipo,
-      estado: estado || 'en_ruta',
-    });
+    let nuevoViaje = null;
+    for (let intento = 0; intento < 5; intento++) {
+      const folio = await generarSiguienteFolioViaje();
+      try {
+        nuevoViaje = await Viaje.create({
+          folio,
+          cliente: String(cliente).trim(),
+          origen: origenLimpio,
+          destino: destinoLimpio,
+          ruta: `${origenLimpio} → ${destinoLimpio}`,
+          camion: String(camion).trim(),
+          placasCamion: String(placasExtraidas).trim(),
+          chofer: String(chofer).trim(),
+          tarifaPactada: numTarifa,
+          anticipoEntregado: numAnticipo,
+          estado: estado || 'en_ruta',
+        });
+        break;
+      } catch (errCreate) {
+        if (errCreate.code === 11000 && intento < 4) {
+          continue;
+        }
+        throw errCreate;
+      }
+    }
 
     res.status(201).json({
       status: 'success',
-      message: `Orden de viaje ${folio} emitida correctamente`,
+      message: `Orden de viaje ${nuevoViaje.folio} emitida correctamente`,
       data: { viaje: nuevoViaje },
     });
   } catch (err) {

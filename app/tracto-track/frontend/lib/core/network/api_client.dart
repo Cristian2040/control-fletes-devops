@@ -250,24 +250,60 @@ class ApiClient {
 
   // --- Métodos HTTP Base ---
 
+  bool _esErrorRed(Object e) {
+    final s = e.toString();
+    return s.contains('SocketException') ||
+        s.contains('TimeoutException') ||
+        s.contains('ClientException') ||
+        s.contains('Connection refused') ||
+        s.contains('Connection timed out');
+  }
+
   /// GET request
   Future<http.Response> get(String endpoint) async {
-    final url = Uri.parse('$_baseUrl$endpoint');
-    return http.get(url, headers: _headers).timeout(
-          const Duration(milliseconds: AppConstants.httpTimeout),
-        );
+    try {
+      final url = Uri.parse('$_baseUrl$endpoint');
+      return await http.get(url, headers: _headers).timeout(
+            const Duration(milliseconds: AppConstants.httpTimeout),
+          );
+    } catch (e) {
+      if (_baseUrl != AppConstants.apiBaseUrl && _esErrorRed(e)) {
+        _baseUrl = AppConstants.apiBaseUrl;
+        final fallbackUrl = Uri.parse('$_baseUrl$endpoint');
+        return http.get(fallbackUrl, headers: _headers).timeout(
+              const Duration(milliseconds: AppConstants.httpTimeout),
+            );
+      }
+      rethrow;
+    }
   }
 
   /// POST request
   Future<http.Response> post(String endpoint, {Map<String, dynamic>? body}) async {
-    final url = Uri.parse('$_baseUrl$endpoint');
-    return http.post(
-      url,
-      headers: _headers,
-      body: body != null ? jsonEncode(body) : null,
-    ).timeout(
-      const Duration(milliseconds: AppConstants.httpTimeout),
-    );
+    final encodedBody = body != null ? jsonEncode(body) : null;
+    try {
+      final url = Uri.parse('$_baseUrl$endpoint');
+      return await http.post(
+        url,
+        headers: _headers,
+        body: encodedBody,
+      ).timeout(
+        const Duration(milliseconds: AppConstants.httpTimeout),
+      );
+    } catch (e) {
+      if (_baseUrl != AppConstants.apiBaseUrl && _esErrorRed(e)) {
+        _baseUrl = AppConstants.apiBaseUrl;
+        final fallbackUrl = Uri.parse('$_baseUrl$endpoint');
+        return http.post(
+          fallbackUrl,
+          headers: _headers,
+          body: encodedBody,
+        ).timeout(
+          const Duration(milliseconds: AppConstants.httpTimeout),
+        );
+      }
+      rethrow;
+    }
   }
 
   /// PUT request
@@ -752,13 +788,15 @@ class ApiClient {
         final res = await post('/api/camiones', body: payload);
         if (res.statusCode == 201) {
           final data = jsonDecode(res.body);
-          return CamionModel.fromJson(data['data']['camion']);
-        } else {
+          final creado = CamionModel.fromJson(data['data']['camion']);
+          _demoCamiones.insert(0, creado.toJson());
+          return creado;
+        } else if (res.statusCode == 400 || res.statusCode == 409) {
           final err = jsonDecode(res.body);
-          throw Exception(err['message'] ?? 'Error al guardar camión');
+          throw Exception(err['message'] ?? err['mensaje'] ?? 'Error al guardar camión');
         }
       } catch (e) {
-        if (!e.toString().contains('SocketException')) rethrow;
+        if (!_esErrorRed(e)) rethrow;
       }
     }
 
@@ -829,13 +867,15 @@ class ApiClient {
         final res = await post('/api/choferes', body: payload);
         if (res.statusCode == 201) {
           final data = jsonDecode(res.body);
-          return ChoferModel.fromJson(data['data']['chofer']);
-        } else {
+          final creado = ChoferModel.fromJson(data['data']['chofer']);
+          _demoChoferes.insert(0, creado.toJson());
+          return creado;
+        } else if (res.statusCode == 400 || res.statusCode == 409) {
           final err = jsonDecode(res.body);
-          throw Exception(err['message'] ?? 'Error al guardar chofer');
+          throw Exception(err['message'] ?? err['mensaje'] ?? 'Error al guardar chofer');
         }
       } catch (e) {
-        if (!e.toString().contains('SocketException')) rethrow;
+        if (!_esErrorRed(e)) rethrow;
       }
     }
 
@@ -902,13 +942,15 @@ class ApiClient {
         final res = await post('/api/clientes', body: payload);
         if (res.statusCode == 201) {
           final data = jsonDecode(res.body);
-          return ClienteModel.fromJson(data['data']['cliente']);
-        } else {
+          final creado = ClienteModel.fromJson(data['data']['cliente']);
+          _demoClientes.insert(0, creado.toJson());
+          return creado;
+        } else if (res.statusCode == 400 || res.statusCode == 409) {
           final err = jsonDecode(res.body);
-          throw Exception(err['message'] ?? 'Error al guardar cliente');
+          throw Exception(err['message'] ?? err['mensaje'] ?? 'Error al guardar cliente');
         }
       } catch (e) {
-        if (!e.toString().contains('SocketException')) rethrow;
+        if (!_esErrorRed(e)) rethrow;
       }
     }
 
@@ -972,13 +1014,15 @@ class ApiClient {
         final res = await post('/api/tarifas', body: payload);
         if (res.statusCode == 201) {
           final data = jsonDecode(res.body);
-          return TarifaModel.fromJson(data['data']['tarifa']);
-        } else {
+          final creado = TarifaModel.fromJson(data['data']['tarifa']);
+          _demoTarifas.insert(0, creado.toJson());
+          return creado;
+        } else if (res.statusCode == 400 || res.statusCode == 409) {
           final err = jsonDecode(res.body);
-          throw Exception(err['message'] ?? 'Error al guardar tarifa');
+          throw Exception(err['message'] ?? err['mensaje'] ?? 'Error al guardar tarifa');
         }
       } catch (e) {
-        if (!e.toString().contains('SocketException')) rethrow;
+        if (!_esErrorRed(e)) rethrow;
       }
     }
 
@@ -1123,13 +1167,17 @@ class ApiClient {
         final res = await post('/api/viajes', body: payload);
         if (res.statusCode == 201) {
           final data = jsonDecode(res.body);
-          return ViajeModel.fromJson(data['data']['viaje']);
-        } else {
+          final creado = ViajeModel.fromJson(data['data']['viaje']);
+          _demoViajes.insert(0, creado.toJson());
+          return creado;
+        } else if (res.statusCode == 400 || res.statusCode == 409) {
           final err = jsonDecode(res.body);
-          throw Exception(err['message'] ?? 'Error al emitir orden de viaje');
+          throw Exception(
+            err['message'] ?? err['mensaje'] ?? 'Error al emitir orden de viaje',
+          );
         }
       } catch (e) {
-        if (!e.toString().contains('SocketException')) rethrow;
+        if (!_esErrorRed(e)) rethrow;
       }
     }
 
