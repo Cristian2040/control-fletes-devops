@@ -84,7 +84,7 @@ void main() {
       expect(find.text('\$18,500.00 MXN'), findsOneWidget);
     });
 
-    testWidgets('4. AsignacionViajeScreen (A-04) permite emitir nueva Orden de Viaje (US-07)', (tester) async {
+    testWidgets('4. AsignacionViajeScreen (A-04) permite seleccionar de desplegables y emitir Orden de Viaje (US-07)', (tester) async {
       await tester.pumpWidget(_wrapWithApp(const AsignacionViajeScreen()));
       await tester.pumpAndSettle();
 
@@ -93,10 +93,18 @@ void main() {
       expect(find.text('Cliente Solicitante'), findsOneWidget);
       expect(find.text('Emitir Orden de Viaje (US-07)'), findsOneWidget);
 
-      await tester.enterText(find.byKey(const Key('input_viaje_cliente')), 'Ternium México');
-      await tester.enterText(find.byKey(const Key('input_viaje_origen')), 'Querétaro');
-      await tester.enterText(find.byKey(const Key('input_viaje_destino')), 'Monterrey');
-      await tester.enterText(find.byKey(const Key('input_viaje_tarifa')), '16800');
+      // Seleccionar Cliente desde el desplegable
+      await tester.tap(find.byKey(const Key('input_viaje_cliente')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ternium México').last);
+      await tester.pumpAndSettle();
+
+      // Seleccionar Ruta desde el desplegable de catálogo (auto-llena Querétaro -> Monterrey y 16800)
+      await tester.tap(find.byKey(const Key('input_viaje_ruta_catalogo')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Querétaro → Monterrey').last);
+      await tester.pumpAndSettle();
+
       await tester.enterText(find.byKey(const Key('input_viaje_anticipo')), '4500');
 
       final btnEmitir = find.byKey(const Key('btn_emitir_orden_viaje'));
