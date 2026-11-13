@@ -311,3 +311,35 @@ Registro de entregas por Sprint, con lo construido, pruebas y decisiones.
 ### Pruebas
 - Backend: `backend/test/viajes.test.js` (56/56 tests pasando).
 - Frontend: `frontend/test/sprint7_viajes_test.dart` (54/54 tests pasando en toda la suite de Flutter).
+
+---
+
+## Sprint 8 — Auditoría en Ruta y Validación de Fotografía (A-13, A-14 — RF-06, US-08, US-08b, US-09comp)
+
+**Fecha:** Noviembre 2026
+
+### Entregables
+
+#### Backend
+- **Controlador `gastoController.js`** (`src/controllers/gastoController.js`):
+  - `auditarGasto` (`PUT / PATCH /api/gastos/:id/auditoria`): Permite al administrador aprobar (`aprobado`) o rechazar (`rechazado`, con `motivoRechazo`) los comprobantes fotográficos por ID o Folio (`#TT-######`).
+  - `listarGastos` (`GET /api/gastos`): Pobla datos de `chofer` y `usuario`, y devuelve el contador `pendientesAuditoria`.
+- **Rutas de Gastos y Auditoría** (`src/routes/gastos.js`):
+  - Endpoints `PUT /api/gastos/:id/auditoria` y `PATCH /api/gastos/:id/auditoria` protegidos con JWT.
+- **Pruebas de Integración**: `backend/test/auditoria.test.js` (7 suites / 61 pruebas Jest pasando).
+
+#### Frontend
+- **Modelo `GastoModel` y `LocalGastoRepository`**:
+  - Campos `choferNombre` y `motivoRechazo`, getters `isAuditoriaPendiente`, `isAprobado`, `isRechazado`.
+  - Método `actualizarAuditoria(...)` en `LocalGastoRepository` para persistir dictámenes localmente.
+- **Métodos en `ApiClient`** (`lib/core/network/api_client.dart`):
+  - `fetchGastosAuditoria({String? estadoAuditoria})` y `auditarGasto(...)` con soporte online y respaldo local/demo.
+- **Pantallas del Administrador (A-13, A-14)**:
+  - `AuditoriaScreen` (A-13, `lib/features/admin/screens/auditoria_screen.dart`): Encabezado con contador de tickets por revisar, insignia `PENDIENTE`, filtros por estado (`Por Revisar`, `Aprobados`, `Rechazados`, `Todos`), tarjetas de comprobante con chofer, placas, tipo, hora, monto y enlace `Auditar Ticket`.
+  - `ValidacionFotografiaScreen` (A-14, `lib/features/admin/screens/validacion_fotografia_screen.dart`): Tarjeta de evidencia fotográfica comprimida (`US-09comp`) con vista del ticket/fotografía real, tarjeta de datos declarados (`Chofer`, `Unidad`, `Odómetro Declarado`, `Monto en Comprobante`) y botones de dictamen `Rechazar Ticket (US-08b)` y `Aprobar Ticket (US-08)`.
+- **Rutas en `AppRoutes`** (`lib/core/routes/app_routes.dart`):
+  - Vinculación de `adminAuditoria` (A-13) y `adminValidacion` (A-14).
+
+### Pruebas
+- Backend: `backend/test/auditoria.test.js` (61/61 tests pasando).
+- Frontend: `frontend/test/sprint8_auditoria_test.dart` (58/58 tests pasando en toda la suite de Flutter).
