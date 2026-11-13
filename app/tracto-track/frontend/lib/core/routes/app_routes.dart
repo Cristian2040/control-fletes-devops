@@ -29,6 +29,8 @@ import '../../features/admin/screens/alta_camion_screen.dart';
 import '../../features/admin/screens/alta_chofer_screen.dart';
 import '../../features/admin/screens/alta_cliente_screen.dart';
 import '../../features/admin/screens/alta_tarifa_screen.dart';
+import '../../features/admin/screens/auditoria_screen.dart';
+import '../../features/admin/screens/validacion_fotografia_screen.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -91,16 +93,8 @@ class AppRoutes {
       adminAltaChofer: (context) => const AltaChoferScreen(),
       adminAltaCliente: (context) => const AltaClienteScreen(),
       adminAltaTarifa: (context) => const AltaTarifaScreen(),
-      adminAuditoria: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-13',
-            nombre: 'Auditoría en Ruta',
-            sprint: 8,
-          ),
-      adminValidacion: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-14',
-            nombre: 'Validación de Fotografía',
-            sprint: 8,
-          ),
+      adminAuditoria: (context) => const AuditoriaScreen(),
+      adminValidacion: (context) => const ValidacionFotografiaScreen(),
       adminLiquidacionSelector: (context) => const AdminPlaceholderScreen(
             codigo: 'A-15',
             nombre: 'Liquidación Automatizada – Selector',
