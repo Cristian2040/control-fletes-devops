@@ -84,7 +84,7 @@ exports.obtenerTableroResumen = async (req, res, next) => {
   try {
     const [viajesActivos, ticketsPorAuditar, unidadesFlota] = await Promise.all([
       Viaje.countDocuments({ estado: 'en_ruta' }),
-      Gasto.countDocuments({ estadoAuditoria: 'por_auditar' }),
+      Gasto.countDocuments({ estadoAuditoria: { $in: ['pendiente', 'por_auditar'] } }),
       Camion.countDocuments({ activo: true }),
     ]);
 

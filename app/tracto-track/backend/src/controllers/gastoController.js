@@ -1,9 +1,10 @@
 /**
- * Controlador de Gastos (RF-02, US-03, Sprint 3)
+ * Controlador de Gastos y Auditoría en Ruta (RF-02, US-03, RF-06, US-08, US-08b — Sprints 3 y 8)
  * 
- * Gestiona la captura, validación (Patrón P3 Strategy), consulta
- * y bitácora de gastos e insumos en ruta.
+ * Gestiona la captura, validación (Patrón P3 Strategy), consulta,
+ * bitácora y auditoría administrativa de gastos e insumos en ruta.
  */
+const mongoose = require('mongoose');
 const { Gasto, Chofer } = require('../models');
 const { gastoValidator } = require('../strategies');
 
@@ -165,7 +166,6 @@ exports.listarGastos = async (req, res, next) => {
       filtro.chofer = { $eq: String(req.query.choferId) };
     }
 
-
     if (req.query.tipo) {
       filtro.tipo = normalizarTipoGasto(req.query.tipo);
     }
@@ -176,16 +176,19 @@ exports.listarGastos = async (req, res, next) => {
 
     const gastos = await Gasto.find(filtro)
       .sort({ fecha: -1, createdAt: -1 })
-      .populate('chofer', 'nombre licencia');
+      .populate('chofer', 'nombre licencia')
+      .populate('usuario', 'nombre username');
 
-    // Calcular estadísticas para C-05 ("Barra de total")
+    // Calcular estadísticas para C-05 ("Barra de total") y A-13 ("tickets por revisar")
     const totalComprobantes = gastos.length;
     const totalImporte = gastos.reduce((acc, curr) => acc + (curr.monto || 0), 0);
+    const pendientesAuditoria = gastos.filter((g) => g.estadoAuditoria === 'pendiente').length;
 
     return res.status(200).json({
       status: 'success',
       totalComprobantes,
       totalImporte,
+      pendientesAuditoria,
       data: {
         gastos,
       },
@@ -202,10 +205,17 @@ exports.listarGastos = async (req, res, next) => {
 exports.obtenerGastoPorId = async (req, res, next) => {
   try {
     let gasto = null;
-    if (req.params.id.startsWith('#TT-')) {
-      gasto = await Gasto.findOne({ folio: req.params.id }).populate('chofer', 'nombre licencia');
-    } else {
-      gasto = await Gasto.findById(req.params.id).populate('chofer', 'nombre licencia');
+    const paramId = decodeURIComponent(req.params.id);
+
+    if (paramId.startsWith('#TT-') || paramId.startsWith('TT-')) {
+      const folioNormalizado = paramId.startsWith('#') ? paramId : `#${paramId}`;
+      gasto = await Gasto.findOne({ folio: folioNormalizado })
+        .populate('chofer', 'nombre licencia')
+        .populate('usuario', 'nombre username');
+    } else if (mongoose.Types.ObjectId.isValid(paramId)) {
+      gasto = await Gasto.findById(paramId)
+        .populate('chofer', 'nombre licencia')
+        .populate('usuario', 'nombre username');
     }
 
     if (!gasto) {
@@ -217,6 +227,75 @@ exports.obtenerGastoPorId = async (req, res, next) => {
 
     return res.status(200).json({
       status: 'success',
+      data: {
+        gasto,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT / PATCH /api/gastos/:id/auditoria
+ * Aprueba o rechaza un comprobante de gasto (Sprint 8 — RF-06, US-08, US-08b, A-14).
+ */
+exports.auditarGasto = async (req, res, next) => {
+  try {
+    const { estadoAuditoria, motivoRechazo } = req.body;
+    const estadoNormalizado = estadoAuditoria
+      ? String(estadoAuditoria).toLowerCase().trim()
+      : '';
+
+    const estadosPermitidos = ['aprobado', 'rechazado', 'pendiente'];
+    if (!estadosPermitidos.includes(estadoNormalizado)) {
+      return res.status(400).json({
+        status: 'fail',
+        message:
+          'El estadoAuditoria es obligatorio y debe ser "aprobado", "rechazado" o "pendiente"',
+      });
+    }
+
+    const paramId = decodeURIComponent(req.params.id);
+    let gasto = null;
+
+    if (paramId.startsWith('#TT-') || paramId.startsWith('TT-')) {
+      const folioNormalizado = paramId.startsWith('#') ? paramId : `#${paramId}`;
+      gasto = await Gasto.findOne({ folio: folioNormalizado });
+    } else if (mongoose.Types.ObjectId.isValid(paramId)) {
+      gasto = await Gasto.findById(paramId);
+    }
+
+    if (!gasto) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Comprobante de gasto no encontrado para auditar',
+      });
+    }
+
+    gasto.estadoAuditoria = estadoNormalizado;
+    if (estadoNormalizado === 'rechazado') {
+      gasto.motivoRechazo = motivoRechazo
+        ? String(motivoRechazo).trim()
+        : 'Rechazado en validación fotográfica';
+    } else {
+      gasto.motivoRechazo = '';
+    }
+
+    await gasto.save();
+    await gasto.populate('chofer', 'nombre licencia');
+    await gasto.populate('usuario', 'nombre username');
+
+    const accionTexto =
+      estadoNormalizado === 'aprobado'
+        ? 'aprobado'
+        : estadoNormalizado === 'rechazado'
+          ? 'rechazado'
+          : 'marcado como pendiente';
+
+    return res.status(200).json({
+      status: 'success',
+      message: `Ticket ${gasto.folio} ${accionTexto} exitosamente`,
       data: {
         gasto,
       },
