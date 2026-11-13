@@ -333,40 +333,43 @@ class ApiClient {
       'id': 'demo_1',
       'folio': '#TT-000140',
       'tipo': 'diesel',
-      'monto': 4850.0,
-      'odometro': 141800.0,
-      'proveedor': 'Oxxo Gas Matehuala',
+      'monto': 1240.0,
+      'odometro': 148320.0,
+      'proveedor': 'ESTACIÓN PEMEX 4402',
       'fotografiaUrl': 'demo_ticket_diesel.jpg',
       'fotografiaBase64': 'demo_base64_foto',
       'placasCamion': 'NLZ-8823-A',
+      'choferNombre': 'Jorge González',
       'estadoSincronizacion': 'sincronizado',
-      'estadoAuditoria': 'aprobado',
+      'estadoAuditoria': 'pendiente',
       'fecha': DateTime.now().subtract(const Duration(hours: 5)).toIso8601String(),
     },
     {
       'id': 'demo_2',
       'folio': '#TT-000141',
       'tipo': 'fluidos',
-      'monto': 620.0,
-      'odometro': 142100.0,
-      'proveedor': 'Refaccionaria San Luis',
+      'monto': 380.0,
+      'odometro': 148450.0,
+      'proveedor': 'Taller Caminos',
       'fotografiaUrl': 'demo_ticket_aceite.jpg',
       'fotografiaBase64': 'demo_base64_foto',
       'placasCamion': 'NLZ-8823-A',
+      'choferNombre': 'Jorge González',
       'estadoSincronizacion': 'sincronizado',
-      'estadoAuditoria': 'aprobado',
+      'estadoAuditoria': 'pendiente',
       'fecha': DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
     },
     {
       'id': 'demo_3',
       'folio': '#TT-000142',
       'tipo': 'viaticos',
-      'monto': 380.0,
-      'odometro': null,
-      'proveedor': 'Restaurante El Parador',
+      'monto': 650.0,
+      'odometro': 148600.0,
+      'proveedor': 'Caseta MTY-SLP',
       'fotografiaUrl': 'demo_ticket_comida.jpg',
       'fotografiaBase64': 'demo_base64_foto',
       'placasCamion': 'NLZ-8823-A',
+      'choferNombre': 'Jorge González',
       'estadoSincronizacion': 'sincronizado',
       'estadoAuditoria': 'pendiente',
       'fecha': DateTime.now().subtract(const Duration(minutes: 45)).toIso8601String(),
@@ -1210,6 +1213,79 @@ class ApiClient {
     );
     _demoViajes.insert(0, nuevo.toJson());
     return nuevo;
+  }
+
+  // =========================================================================
+  // AUDITORÍA EN RUTA Y VALIDACIÓN DE FOTOGRAFÍA (Sprint 8 — A-13, A-14, RF-06, US-08, US-08b)
+  // =========================================================================
+
+  /// Obtiene los comprobantes de gastos para el módulo de Auditoría en Ruta (A-13, RF-06).
+  Future<List<GastoModel>> fetchGastosAuditoria({String? estadoAuditoria}) async {
+    final resultado = await obtenerGastos();
+    final rawList = (resultado['gastos'] as List? ?? [])
+        .map((e) => GastoModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    if (estadoAuditoria != null && estadoAuditoria.isNotEmpty) {
+      final filtro = estadoAuditoria.toLowerCase().trim();
+      return rawList
+          .where((g) => g.estadoAuditoria.toLowerCase() == filtro)
+          .toList();
+    }
+    return rawList;
+  }
+
+  /// Aprueba o rechaza un comprobante fotográfico (A-14 — US-08, US-08b).
+  Future<GastoModel> auditarGasto({
+    required GastoModel gasto,
+    required String estadoAuditoria,
+    String? motivoRechazo,
+  }) async {
+    final estadoLimpio = estadoAuditoria.toLowerCase().trim();
+    final idOrFolio = gasto.id.isNotEmpty ? gasto.id : gasto.folio;
+
+    // 1. Actualizar en almacenamiento local y en lista demo en memoria
+    await _localRepo.actualizarAuditoria(
+      idOrFolio,
+      estadoLimpio,
+      motivoRechazo: motivoRechazo,
+    );
+
+    for (final item in _demoGastos) {
+      if (item['id'] == gasto.id || item['folio'] == gasto.folio) {
+        item['estadoAuditoria'] = estadoLimpio;
+        if (motivoRechazo != null) {
+          item['motivoRechazo'] = motivoRechazo;
+        }
+      }
+    }
+
+    // 2. Transmitir dictamen al backend si hay sesión y red activa
+    if (hasToken && !_modoAvion) {
+      try {
+        final targetId = Uri.encodeComponent(
+          gasto.id.isNotEmpty && !gasto.id.startsWith('demo_') && !gasto.id.startsWith('offline_')
+              ? gasto.id
+              : gasto.folio,
+        );
+        final res = await put(
+          '/api/gastos/$targetId/auditoria',
+          body: {
+            'estadoAuditoria': estadoLimpio,
+            if (motivoRechazo != null) 'motivoRechazo': motivoRechazo,
+          },
+        );
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+          return GastoModel.fromJson(data['data']['gasto']);
+        }
+      } catch (_) {}
+    }
+
+    return gasto.copyWith(
+      estadoAuditoria: estadoLimpio,
+      motivoRechazo: motivoRechazo ?? '',
+    );
   }
 
   /// Verifica si la respuesta indica token expirado (401)

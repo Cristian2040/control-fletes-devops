@@ -83,6 +83,30 @@ class LocalGastoRepository {
     await _storage.writeAllRaw(updated);
   }
 
+  /// Actualiza el estado de auditoría ('aprobado' o 'rechazado') de un gasto local (Sprint 8 — US-08 / US-08b).
+  Future<void> actualizarAuditoria(
+    String idOrFolio,
+    String estadoAuditoria, {
+    String? motivoRechazo,
+  }) async {
+    final rawList = await _storage.readAllRaw();
+    final updated = rawList.map((item) {
+      final itemId = (item['id'] ?? item['_id'] ?? '').toString();
+      final itemFolio = (item['folio'] ?? '').toString();
+      if (itemId == idOrFolio || itemFolio == idOrFolio) {
+        final map = Map<String, dynamic>.from(item);
+        map['estadoAuditoria'] = estadoAuditoria;
+        if (motivoRechazo != null) {
+          map['motivoRechazo'] = motivoRechazo;
+        }
+        return map;
+      }
+      return item;
+    }).toList();
+
+    await _storage.writeAllRaw(updated);
+  }
+
   /// Elimina un gasto local por su ID.
   Future<void> eliminar(String id) async {
     final rawList = await _storage.readAllRaw();
