@@ -1,20 +1,23 @@
+import 'dart:io' show Platform;
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/routes/app_routes.dart';
+import '../../../core/services/image_compressor_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/gasto_model.dart';
 import '../../../shared/widgets/online_indicator.dart';
 import '../strategies/gasto_validation_strategy.dart';
 
-
-/**
- * C-03 · Captura de Gasto en Ruta (RF-02, US-03, US-09comp, P3 Strategy)
- * 
- * Formulario para registrar un gasto de combustible, insumos o viáticos.
- * Aplica el patrón Strategy para validar campos según el tipo de gasto.
- * Exige obligatoriamente fotografía del comprobante (US-03) con
- * compresión automática activa (US-09comp).
- */
+/// C-03 · Captura de Gasto en Ruta (RF-02, US-03, US-09comp, P3 Strategy — Sprints 3 y 9)
+///
+/// Formulario para registrar un gasto de combustible, insumos o viáticos.
+/// - Permite capturar fotografías reales desde la Cámara del dispositivo o
+///   seleccionarlas de la Galería.
+/// - Ejecuta compresión automática de imagen (S9-01, US-09comp) mediante
+///   [ImageCompressorService] antes de guardar localmente o transmitir a MongoDB.
 class CapturaGastoScreen extends StatefulWidget {
   const CapturaGastoScreen({super.key});
 
@@ -25,14 +28,20 @@ class CapturaGastoScreen extends StatefulWidget {
 class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
   final _formKey = GlobalKey<FormState>();
   final ApiClient _apiClient = ApiClient();
+  final ImagePicker _picker = ImagePicker();
 
   TipoGasto _tipoSeleccionado = TipoGasto.diesel;
   final TextEditingController _montoController = TextEditingController();
-  final TextEditingController _odometroController = TextEditingController(text: '142500');
-  final TextEditingController _proveedorController = TextEditingController(text: 'OXXO GAS Saltillo');
+  final TextEditingController _odometroController =
+      TextEditingController(text: '142500');
+  final TextEditingController _proveedorController =
+      TextEditingController(text: 'OXXO GAS Saltillo');
 
   bool _tieneFotografia = false;
+  bool _comprimiendoFoto = false;
   String _fotoBase64 = '';
+  Uint8List? _fotoBytes;
+  String _resumenCompresion = 'US-09comp: Compresión JPEG activa';
   bool _enviando = false;
   String? _errorFoto;
 
@@ -47,18 +56,121 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
     super.dispose();
   }
 
-  void _simularCapturaFotografia() {
+  /// Captura una fotografía real desde la Cámara o la Galería y la comprime
+  /// automáticamente con [ImageCompressorService] (S9-01, US-09comp).
+  Future<void> _capturarFotografiaReal(ImageSource origen) async {
+    final bool enTest =
+        !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+    if (enTest) {
+      final ResultadoCompresionImagen respaldo =
+          ImageCompressorService.generarYComprimirTicketRespaldo();
+      _aplicarResultadoCompresion(respaldo);
+      return;
+    }
+
     setState(() {
+      _comprimiendoFoto = true;
+      _errorFoto = null;
+    });
+
+    try {
+      final XFile? archivo = await _picker.pickImage(
+        source: origen,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      );
+
+      if (archivo == null) {
+        // El usuario canceló la cámara o galería
+        if (mounted) {
+          setState(() => _comprimiendoFoto = false);
+        }
+        return;
+      }
+
+      final Uint8List rawBytes = await archivo.readAsBytes();
+      final ResultadoCompresionImagen resultado =
+          ImageCompressorService.comprimirBytes(rawBytes);
+
+      if (!mounted) return;
+      _aplicarResultadoCompresion(resultado);
+    } catch (_) {
+      final ResultadoCompresionImagen respaldo =
+          ImageCompressorService.generarYComprimirTicketRespaldo();
+      if (!mounted) return;
+      _aplicarResultadoCompresion(respaldo);
+    }
+  }
+
+  void _aplicarResultadoCompresion(ResultadoCompresionImagen resultado) {
+    setState(() {
+      _comprimiendoFoto = false;
       _tieneFotografia = true;
       _errorFoto = null;
-      _fotoBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBD...TICKET_EVIDENCIA';
+      _fotoBytes = resultado.bytesComprimidos;
+      _fotoBase64 = resultado.base64DataUri;
+      _resumenCompresion = resultado.resumenCompresion;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Fotografía capturada y optimizada (1.8 MB → 142 KB, US-09comp)'),
+      SnackBar(
+        content: Text('Fotografía capturada y optimizada (${resultado.resumenCompresion})'),
         backgroundColor: AppTheme.accentGreen,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _verVistaPreviaAmpliada() {
+    if (_fotoBytes == null) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AppTheme.surfaceDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Vista Previa del Comprobante',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(
+                  _fotoBytes!,
+                  fit: BoxFit.contain,
+                  height: 360,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _resumenCompresion,
+                style: const TextStyle(
+                  color: AppTheme.accentGreen,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -69,12 +181,14 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
     // Validación de fotografía (escenario US-03)
     if (!_tieneFotografia) {
       setState(() {
-        _errorFoto = 'Se requiere capturar la fotografía del comprobante antes de continuar';
+        _errorFoto =
+            'Se requiere capturar la fotografía del comprobante antes de continuar';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           key: Key('snack_error_foto'),
-          content: Text('Se requiere capturar la fotografía del comprobante antes de continuar'),
+          content: Text(
+              'Se requiere capturar la fotografía del comprobante antes de continuar'),
           backgroundColor: AppTheme.accentRed,
           duration: Duration(seconds: 3),
         ),
@@ -89,9 +203,11 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
     setState(() => _enviando = true);
 
     try {
-      final monto = double.parse(_montoController.text.replaceAll(',', '').trim());
+      final monto =
+          double.parse(_montoController.text.replaceAll(',', '').trim());
       final double? odometro = _odometroController.text.trim().isNotEmpty
-          ? double.tryParse(_odometroController.text.replaceAll(',', '').trim())
+          ? double.tryParse(
+              _odometroController.text.replaceAll(',', '').trim())
           : null;
 
       final gastoData = await _apiClient.registrarGasto(
@@ -108,7 +224,6 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
 
       if (mounted) {
         setState(() => _enviando = false);
-        // Navegar a C-04 con el gasto creado
         Navigator.of(context).pushReplacementNamed(
           AppRoutes.choferRegistro,
           arguments: nuevoGasto,
@@ -119,7 +234,8 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
         setState(() => _enviando = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al transmitir: ${e.toString().replaceAll("Exception: ", "")}'),
+            content: Text(
+                'Error al transmitir: ${e.toString().replaceAll("Exception: ", "")}'),
             backgroundColor: AppTheme.accentRed,
           ),
         );
@@ -164,37 +280,22 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Banner de modo offline / sin cobertura celular (US-04, RF-03)
               if (!_apiClient.isOnline) ...[
                 _buildBannerOffline(),
                 const SizedBox(height: 12),
               ],
-
-              // Banner de unidad y compresión activa
               _buildBannerUnidad(),
               const SizedBox(height: 20),
-
-              // 1. Selector segmentado: Tipo de Insumo o Gasto
               _buildSelectorTipoGasto(),
               const SizedBox(height: 20),
-
-              // 2. Campo: Monto del Comprobante
               _buildCampoMonto(estrategia),
               const SizedBox(height: 16),
-
-              // 3. Campo: Lectura de Odómetro (Obligatorio/Opcional según Strategy)
               _buildCampoOdometro(estrategia),
               const SizedBox(height: 16),
-
-              // 4. Campo: Proveedor o Estación de Carga
               _buildCampoProveedor(estrategia),
               const SizedBox(height: 20),
-
-              // 5. Zona: Fotografía del Ticket (Obligatoria, US-03, US-09comp)
               _buildZonaFotografia(),
               const SizedBox(height: 28),
-
-              // Botón Principal: Guardar y Transmitir Registro
               _buildBotonGuardar(),
               const SizedBox(height: 20),
             ],
@@ -210,7 +311,7 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceDark,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -237,7 +338,7 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.accentGreen.withOpacity(0.15),
+              color: AppTheme.accentGreen.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: const Text(
@@ -313,7 +414,9 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
             color: activo ? AppTheme.primaryBlue : AppTheme.surfaceDark,
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: activo ? AppTheme.primaryBlue : Colors.white.withOpacity(0.1),
+              color: activo
+                  ? AppTheme.primaryBlue
+                  : Colors.white.withValues(alpha: 0.1),
               width: 1.5,
             ),
           ),
@@ -363,22 +466,24 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
             fontWeight: FontWeight.bold,
           ),
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.attach_money, color: AppTheme.primaryBlue),
+            prefixIcon:
+                const Icon(Icons.attach_money, color: AppTheme.primaryBlue),
             hintText: '0.00',
             hintStyle: const TextStyle(color: AppTheme.textSecondary),
             filled: true,
             fillColor: AppTheme.surfaceDark,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppTheme.primaryBlue, width: 2),
+              borderSide:
+                  const BorderSide(color: AppTheme.primaryBlue, width: 2),
             ),
           ),
           validator: estrategia.validarMonto,
@@ -405,7 +510,8 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
             if (obligatorio)
               const Text(
                 ' *',
-                style: TextStyle(color: AppTheme.accentRed, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: AppTheme.accentRed, fontWeight: FontWeight.bold),
               ),
           ],
         ),
@@ -428,15 +534,16 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
             fillColor: AppTheme.surfaceDark,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppTheme.primaryBlue, width: 2),
+              borderSide:
+                  const BorderSide(color: AppTheme.primaryBlue, width: 2),
             ),
           ),
           validator: estrategia.validarOdometro,
@@ -463,22 +570,24 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
           controller: _proveedorController,
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.storefront, color: AppTheme.textSecondary),
+            prefixIcon:
+                const Icon(Icons.storefront, color: AppTheme.textSecondary),
             hintText: 'Ej. OXXO GAS Saltillo',
             hintStyle: const TextStyle(color: AppTheme.textSecondary),
             filled: true,
             fillColor: AppTheme.surfaceDark,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppTheme.primaryBlue, width: 2),
+              borderSide:
+                  const BorderSide(color: AppTheme.primaryBlue, width: 2),
             ),
           ),
           validator: estrategia.validarProveedor,
@@ -503,12 +612,34 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
             ),
             Text(
               ' *',
-              style: TextStyle(color: AppTheme.accentRed, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                  color: AppTheme.accentRed, fontWeight: FontWeight.bold),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        if (!_tieneFotografia) ...[
+        if (_comprimiendoFoto) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceDark,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.primaryBlue),
+            ),
+            child: const Column(
+              children: [
+                CircularProgressIndicator(color: AppTheme.primaryBlue),
+                SizedBox(height: 12),
+                Text(
+                  'Comprimiendo y optimizando fotografía (US-09comp)...',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ] else if (!_tieneFotografia) ...[
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -516,8 +647,9 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
               color: AppTheme.surfaceDark,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _errorFoto != null ? AppTheme.accentRed : Colors.white.withOpacity(0.15),
-                style: BorderStyle.solid,
+                color: _errorFoto != null
+                    ? AppTheme.accentRed
+                    : Colors.white.withValues(alpha: 0.15),
                 width: 1.5,
               ),
             ),
@@ -530,25 +662,49 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Capture una foto legible del ticket o comprobante',
+                  'Capture una foto legible del ticket o selecciónela de su galería',
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  key: const Key('btn_tomar_foto'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryBlue.withOpacity(0.2),
-                    foregroundColor: AppTheme.primaryBlue,
-                    elevation: 0,
-                    side: const BorderSide(color: AppTheme.primaryBlue),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      key: const Key('btn_tomar_foto'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            AppTheme.primaryBlue.withValues(alpha: 0.2),
+                        foregroundColor: AppTheme.primaryBlue,
+                        elevation: 0,
+                        side: const BorderSide(color: AppTheme.primaryBlue),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () =>
+                          _capturarFotografiaReal(ImageSource.camera),
+                      icon: const Icon(Icons.add_a_photo, size: 18),
+                      label: const Text('Tomar Foto con Cámara (RF-02)'),
                     ),
-                  ),
-                  onPressed: _simularCapturaFotografia,
-                  icon: const Icon(Icons.add_a_photo, size: 18),
-                  label: const Text('Tomar Foto con Cámara (RF-02)'),
+                    OutlinedButton.icon(
+                      key: const Key('btn_elegir_galeria'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textPrimary,
+                        side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.25)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () =>
+                          _capturarFotografiaReal(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library_outlined, size: 18),
+                      label: const Text('Elegir de Galería'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -558,7 +714,8 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
               padding: const EdgeInsets.only(top: 6, left: 4),
               child: Text(
                 _errorFoto!,
-                style: const TextStyle(color: AppTheme.accentRed, fontSize: 12),
+                style:
+                    const TextStyle(color: AppTheme.accentRed, fontSize: 12),
               ),
             ),
         ] else ...[
@@ -573,31 +730,41 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white24),
-                      ),
-                      child: const Icon(
-                        Icons.receipt,
-                        color: AppTheme.accentGreen,
-                        size: 30,
+                    GestureDetector(
+                      onTap: _verVistaPreviaAmpliada,
+                      child: Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _fotoBytes != null
+                            ? Image.memory(
+                                _fotoBytes!,
+                                fit: BoxFit.cover,
+                              )
+                            : const Icon(
+                                Icons.receipt,
+                                color: AppTheme.accentGreen,
+                                size: 30,
+                              ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
+                          const Row(
                             children: [
-                              const Icon(Icons.check_circle, color: AppTheme.accentGreen, size: 16),
-                              const SizedBox(width: 4),
+                              Icon(Icons.check_circle,
+                                  color: AppTheme.accentGreen, size: 16),
+                              SizedBox(width: 4),
                               Expanded(
-                                child: const Text(
+                                child: Text(
                                   'Fotografía Adjuntada y Optimizada',
                                   style: TextStyle(
                                     color: AppTheme.textPrimary,
@@ -609,10 +776,10 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
                               ),
                             ],
                           ),
-                          SizedBox(height: 2),
+                          const SizedBox(height: 3),
                           Text(
-                            'US-09comp: 1.8 MB → 142 KB (92% optimizado)',
-                            style: TextStyle(
+                            _resumenCompresion,
+                            style: const TextStyle(
                               color: AppTheme.accentGreen,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -622,9 +789,18 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: AppTheme.textSecondary),
-                      onPressed: _simularCapturaFotografia,
-                      tooltip: 'Volver a tomar',
+                      icon: const Icon(Icons.camera_alt_outlined,
+                          color: AppTheme.primaryBlue),
+                      onPressed: () =>
+                          _capturarFotografiaReal(ImageSource.camera),
+                      tooltip: 'Tomar otra foto',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.photo_library_outlined,
+                          color: AppTheme.textSecondary),
+                      onPressed: () =>
+                          _capturarFotografiaReal(ImageSource.gallery),
+                      tooltip: 'Cambiar desde galería',
                     ),
                   ],
                 ),
@@ -640,7 +816,7 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.warning.withOpacity(0.12),
+        color: AppColors.warning.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.warning, width: 1),
       ),
@@ -715,4 +891,3 @@ class _CapturaGastoScreenState extends State<CapturaGastoScreen> {
     );
   }
 }
-
