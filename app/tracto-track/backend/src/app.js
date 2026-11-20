@@ -6,6 +6,7 @@
  * con Supertest (sin necesidad de levantar el puerto).
  */
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -33,6 +34,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // --- Rutas ---
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 app.use('/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/gastos', gastosRoutes);

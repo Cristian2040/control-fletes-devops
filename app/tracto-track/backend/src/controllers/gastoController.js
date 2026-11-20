@@ -7,6 +7,7 @@
 const mongoose = require('mongoose');
 const { Gasto, Chofer } = require('../models');
 const { gastoValidator } = require('../strategies');
+const { procesarEvidenciaFotografica } = require('../services/imageStorageService');
 
 /**
  * Normaliza el tipo de gasto a su valor canónico en minúsculas sin acentos
@@ -97,8 +98,13 @@ exports.registrarGasto = async (req, res, next) => {
       }
     }
 
-    // 4. Determinar fotografía final
-    const fotoFinal = fotografiaUrl || (fotografiaBase64 ? 'data:image/jpeg;base64,...' : (fotografia || ''));
+    // 4. Procesar y almacenar evidencia fotográfica comprimida (S-04, US-09comp, Sprint 9)
+    const evidencia = procesarEvidenciaFotografica({
+      folio: folioOffline || 'nuevo',
+      fotografiaBase64: fotografiaBase64 || '',
+      fotografiaUrl: fotografiaUrl || fotografia || '',
+    });
+    const fotoFinal = evidencia.fotografiaUrl;
 
     // 5. Crear registro de gasto con reintento automático ante concurrencia de folios
     const tipoNormalizado = normalizarTipoGasto(tipo);
@@ -116,8 +122,8 @@ exports.registrarGasto = async (req, res, next) => {
           odometro: odometro !== undefined && odometro !== null && odometro !== '' ? Number(odometro) : null,
           proveedor: String(proveedor).trim(),
           fotografiaUrl: fotoFinal,
-          fotografiaBase64: fotografiaBase64 || '',
-          compresionOptimizada: true,
+          fotografiaBase64: evidencia.fotografiaBase64,
+          compresionOptimizada: evidencia.compresionOptimizada,
           chofer: choferId,
           usuario: usuarioId,
           placasCamion: placasCamion || 'NLZ-8823-A',
