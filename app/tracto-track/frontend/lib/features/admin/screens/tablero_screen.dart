@@ -76,40 +76,76 @@ class _TableroScreenState extends State<TableroScreen> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                _buildTarjetaModulo(
-                  key: const Key('card_modulo_asignar_viaje'),
-                  icono: Icons.add_road_rounded,
-                  colorIcono: AppTheme.primaryBlue,
-                  titulo: 'Asignar Nuevo Viaje (RF-05)',
-                  subtitulo: 'Emitir orden de despacho, asignar unidad, chofer y anticipo',
-                  codigoDestino: 'A-04',
-                  onTap: () async {
-                    await Navigator.of(context).pushNamed(AppRoutes.adminAsignacion);
-                    _cargarResumen();
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildTarjetaModulo(
-                  key: const Key('card_modulo_auditoria'),
-                  icono: Icons.fact_check_rounded,
-                  colorIcono: AppColors.warning,
-                  titulo: 'Auditoría en Ruta (RF-06)',
-                  subtitulo: 'Validar comprobantes fotográficos y gastos documentados',
-                  codigoDestino: 'A-13',
-                  onTap: () {
-                    Navigator.of(context).pushNamed(AppRoutes.adminAuditoria);
-                  },
-                ),
-                const SizedBox(height: 12),
-                _buildTarjetaModulo(
-                  key: const Key('card_modulo_liquidaciones'),
-                  icono: Icons.calculate_rounded,
-                  colorIcono: AppColors.success,
-                  titulo: 'Motor de Liquidaciones (US-13)',
-                  subtitulo: 'Cálculo automatizado de fletes, anticipos, gastos y comisiones',
-                  codigoDestino: 'A-15',
-                  onTap: () {
-                    Navigator.of(context).pushNamed(AppRoutes.adminLiquidacionSelector);
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final esTablet = constraints.maxWidth >= 600;
+                    final tarjetasModulos = [
+                      _buildTarjetaModulo(
+                        key: const Key('card_modulo_asignar_viaje'),
+                        icono: Icons.add_road_rounded,
+                        colorIcono: AppTheme.primaryBlue,
+                        titulo: 'Asignar Nuevo Viaje (RF-05)',
+                        subtitulo:
+                            'Emitir orden de despacho, asignar unidad, chofer y anticipo',
+                        codigoDestino: 'A-04',
+                        onTap: () async {
+                          await Navigator.of(context)
+                              .pushNamed(AppRoutes.adminAsignacion);
+                          _cargarResumen();
+                        },
+                      ),
+                      _buildTarjetaModulo(
+                        key: const Key('card_modulo_auditoria'),
+                        icono: Icons.fact_check_rounded,
+                        colorIcono: AppColors.warning,
+                        titulo: 'Auditoría en Ruta (RF-06)',
+                        subtitulo:
+                            'Validar comprobantes fotográficos y gastos documentados',
+                        codigoDestino: 'A-13',
+                        onTap: () {
+                          Navigator.of(context)
+                              .pushNamed(AppRoutes.adminAuditoria);
+                        },
+                      ),
+                      _buildTarjetaModulo(
+                        key: const Key('card_modulo_liquidaciones'),
+                        icono: Icons.calculate_rounded,
+                        colorIcono: AppColors.success,
+                        titulo: 'Motor de Liquidaciones (US-13)',
+                        subtitulo:
+                            'Cálculo automatizado de fletes, anticipos, gastos y comisiones',
+                        codigoDestino: 'A-15',
+                        onTap: () {
+                          Navigator.of(context)
+                              .pushNamed(AppRoutes.adminLiquidacionSelector);
+                        },
+                      ),
+                    ];
+
+                    if (esTablet) {
+                      return Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: tarjetasModulos
+                            .map(
+                              (card) => SizedBox(
+                                width: (constraints.maxWidth - 12) / 2,
+                                child: card,
+                              ),
+                            )
+                            .toList(),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        tarjetasModulos[0],
+                        const SizedBox(height: 12),
+                        tarjetasModulos[1],
+                        const SizedBox(height: 12),
+                        tarjetasModulos[2],
+                      ],
+                    );
                   },
                 ),
               ],

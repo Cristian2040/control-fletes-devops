@@ -7,7 +7,9 @@ import 'package:tracto_trak/core/routes/app_routes.dart';
 import 'package:tracto_trak/core/services/image_compressor_service.dart';
 import 'package:tracto_trak/core/theme/app_theme.dart';
 import 'package:tracto_trak/features/admin/screens/perfil_admin_screen.dart';
+import 'package:tracto_trak/features/admin/screens/tablero_screen.dart';
 import 'package:tracto_trak/features/chofer/screens/captura_gasto_screen.dart';
+import 'package:tracto_trak/features/chofer/screens/ruta_screen.dart';
 
 Widget _wrapWithApp(Widget child) {
   final routes = Map<String, WidgetBuilder>.from(AppRoutes.routes)
@@ -24,9 +26,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  group('Sprint 9 — Compresión Automática de Imágenes (S9-01, US-09comp) y Perfil Admin (A-17)', () {
-    test('1. ImageCompressorService redimensiona y comprime imágenes grandes a JPEG optimizado (US-09comp)', () {
-      // Crear una imagen BMP sin comprimir de 1400x1000 px
+  group('Sprint 9 — S9-01, S9-02, S9-03 y A-17', () {
+    test('S9-01: ImageCompressorService redimensiona y comprime imágenes grandes a JPEG optimizado (US-09comp)', () {
       final original = img.Image(width: 1400, height: 1000);
       img.fill(original, color: img.ColorRgb8(240, 240, 240));
       img.fillRect(
@@ -45,7 +46,6 @@ void main() {
         calidad: 68,
       );
 
-      // Debe haber reducido tanto dimensiones (<= 1024) como peso en bytes
       expect(resultado.anchoFinal, 1024);
       expect(resultado.altoFinal, lessThanOrEqualTo(1024));
       expect(resultado.tamanoComprimidoBytes, lessThan(resultado.tamanoOriginalBytes));
@@ -54,7 +54,7 @@ void main() {
       expect(resultado.resumenCompresion, contains('US-09comp:'));
     });
 
-    testWidgets('2. CapturaGastoScreen (C-03) ofrece botones de Cámara y Galería y muestra imagen comprimida real', (tester) async {
+    testWidgets('S9-01: CapturaGastoScreen (C-03) ofrece Cámara y Galería y muestra imagen comprimida real', (tester) async {
       tester.view.physicalSize = const Size(800, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -76,7 +76,33 @@ void main() {
       expect(find.byType(Image), findsOneWidget);
     });
 
-    testWidgets('3. PerfilAdminScreen (A-17) despliega Supervisión General y Parámetros de Infraestructura (RNF-02, RNF-04)', (tester) async {
+    testWidgets('S9-02: Interfaz del chofer opera con esquema simplificado de alto contraste oscuro (RNF-01)', (tester) async {
+      await tester.pumpWidget(_wrapWithApp(const RutaScreen()));
+      await tester.pumpAndSettle();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+      expect(scaffold.backgroundColor, AppTheme.backgroundDark);
+      expect(find.text('+ Registrar Gasto de Ruta (RF-02)'), findsOneWidget);
+    });
+
+    testWidgets('S9-03: TableroScreen (A-02) se adapta responsivamente para teléfono y tablet (RNF-01)', (tester) async {
+      // Vista Tablet (1024x768)
+      tester.view.physicalSize = const Size(1024, 768);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(_wrapWithApp(const TableroScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Panel de Control (RNF-01)'), findsOneWidget);
+      expect(find.text('Asignar Nuevo Viaje (RF-05)'), findsOneWidget);
+      expect(find.byType(Wrap), findsWidgets);
+    });
+
+    testWidgets('A-17: PerfilAdminScreen despliega Supervisión General y Parámetros de Infraestructura (RNF-02, RNF-04)', (tester) async {
       await tester.pumpWidget(_wrapWithApp(const PerfilAdminScreen()));
       await tester.pumpAndSettle();
 
