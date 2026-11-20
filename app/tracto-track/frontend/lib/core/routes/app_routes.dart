@@ -31,6 +31,7 @@ import '../../features/admin/screens/alta_cliente_screen.dart';
 import '../../features/admin/screens/alta_tarifa_screen.dart';
 import '../../features/admin/screens/auditoria_screen.dart';
 import '../../features/admin/screens/validacion_fotografia_screen.dart';
+import '../../features/admin/screens/perfil_admin_screen.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -105,11 +106,7 @@ class AppRoutes {
             nombre: 'Liquidación Automatizada – Resumen',
             sprint: 10,
           ),
-      adminPerfil: (context) => const AdminPlaceholderScreen(
-            codigo: 'A-17',
-            nombre: 'Perfil de Administrador',
-            sprint: 9,
-          ),
+      adminPerfil: (context) => const PerfilAdminScreen(),
     };
   }
 }

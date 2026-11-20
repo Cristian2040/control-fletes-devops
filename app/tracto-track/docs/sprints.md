@@ -343,3 +343,30 @@ Registro de entregas por Sprint, con lo construido, pruebas y decisiones.
 ### Pruebas
 - Backend: `backend/test/auditoria.test.js` (61/61 tests pasando).
 - Frontend: `frontend/test/sprint8_auditoria_test.dart` (58/58 tests pasando en toda la suite de Flutter).
+
+---
+
+## Sprint 9 — Captura Fotográfica Real, Compresión Automática de Imágenes y Supervisión General (S9-01, S9-02, S9-03, US-09comp, S-04, A-17)
+
+**Fecha:** Noviembre 2026
+
+### Entregables
+
+#### Frontend
+- **Captura Real con Cámara y Galería (`image_picker`)**:
+  - Integración de `image_picker` y permisos de cámara/galería en `AndroidManifest.xml`.
+  - En `CapturaGastoScreen` (C-03, `lib/features/chofer/screens/captura_gasto_screen.dart`), botones **"Tomar Foto con Cámara (RF-02)"** y **"Elegir de Galería"**, con miniatura interactiva y modal de vista previa ampliada.
+- **Compresión Automática de Imágenes en Cliente (S9-01, US-09comp)**:
+  - `ImageCompressorService` (`lib/core/services/image_compressor_service.dart`): Redimensiona fotografías de alta resolución (máx. 1024px) y aplica compresión JPEG optimizada (`quality: 68`) antes de guardar en almacenamiento local o transmitir a la API, calculando el porcentaje real de ahorro en KB.
+- **Pantalla A-17 · Perfil de Administrador – Supervisión General (`PerfilAdminScreen`)**:
+  - Implementada en `lib/features/admin/screens/perfil_admin_screen.dart` y vinculada en `AppRoutes.adminPerfil`.
+  - Muestra la tarjeta de cuenta (`HQ`, `Administrador de Flota`, `ACCESO TOTAL`), la tarjeta `PARÁMETROS DE INFRAESTRUCTURA` (`MongoDB NoSQL (RNF-02)`, `Node.js / Express`, `HTTPS + JWT (RNF-04)`) y el botón destructivo `Cerrar Sesión de Administrador`.
+
+#### Backend
+- **Servicio de Almacenamiento y Optimización de Evidencia (`imageStorageService.js`)**:
+  - Implementa el adaptador de almacenamiento local (`backend/uploads/`, S-04) y normalización de imágenes comprimidas en Base64 (`US-09comp`).
+  - Exposición estática de `/uploads` en `src/app.js` e integración en `gastoController.js`.
+
+### Pruebas
+- Backend: `backend/test/compresion.test.js` (8 suites / 63 tests pasando).
+- Frontend: `frontend/test/sprint9_compresion_perfil_test.dart` (61/61 tests pasando en toda la suite de Flutter).
